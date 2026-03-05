@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { Bank, Category, CreditCard, Transaction, CreditCardTransaction, DEFAULT_BANKS, DEFAULT_CATEGORIES, ADMIN_EMAILS } from '@/lib/types';
@@ -62,9 +62,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [creditCardTransactions, setCreditCardTransactions] = useState<CreditCardTransaction[]>([]);
-
-  // Verificar se o usuário é admin
-  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email);
+  
+  // Refs para evitar loops
+  const initializingRef = useRef(false);
+  const lastUserIdRef = useRef<string | null>(null);
 
   // Verificar expiração da conta
   const checkExpiration = useCallback(async (uid: string) => {
@@ -114,20 +115,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Carregar dados do usuário
   const loadUserData = useCallback(async (uid: string) => {
     try {
-      
-      
       // Carregar bancos
-      const { data: banksData, error: banksError } = await supabase
+      const { data: banksData } = await supabase
         .from('banks')
         .select('*')
         .eq('user_id', uid);
       
-      if (banksError) {
-        console.error('[loadUserData] Erro ao carregar bancos:', banksError);
-      }
-      
       if (banksData) {
-        
         setBanks(banksData.map(b => ({
           id: b.id,
           name: b.name,
@@ -137,17 +131,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       }
 
       // Carregar categorias
-      const { data: categoriesData, error: categoriesError } = await supabase
+      const { data: categoriesData } = await supabase
         .from('categories')
         .select('*')
         .eq('user_id', uid);
       
-      if (categoriesError) {
-        console.error('[loadUserData] Erro ao carregar categorias:', categoriesError);
-      }
-      
       if (categoriesData) {
-        
         const cats = categoriesData.map(c => ({
           id: c.id,
           name: c.name,
@@ -157,17 +146,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       }
 
       // Carregar cartões de crédito
-      const { data: cardsData, error: cardsError } = await supabase
+      const { data: cardsData } = await supabase
         .from('credit_cards')
         .select('*')
         .eq('user_id', uid);
       
-      if (cardsError) {
-        console.error('[loadUserData] Erro ao carregar cartões:', cardsError);
-      }
-      
       if (cardsData) {
-        
         setCreditCards(cardsData.map(c => ({
           id: c.id,
           name: c.name,
@@ -177,19 +161,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         })));
       }
 
-      // Carregar transações (ordenar por created_at para trazer último incluído primeiro)
-      const { data: transactionsData, error: transactionsError } = await supabase
+      // Carregar transações
+      const { data: transactionsData } = await supabase
         .from('transactions')
         .select('*')
         .eq('user_id', uid)
         .order('created_at', { ascending: false });
       
-      if (transactionsError) {
-        console.error('[loadUserData] Erro ao carregar transações:', transactionsError);
-      }
-      
       if (transactionsData) {
-        
         setTransactions(transactionsData.map(t => ({
           id: t.id,
           date: t.date,
@@ -201,19 +180,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         })));
       }
 
-      // Carregar transações de cartão (ordenar por created_at para trazer último incluído primeiro)
-      const { data: ccTransactionsData, error: ccTransactionsError } = await supabase
+      // Carregar transações de cartão
+      const { data: ccTransactionsData } = await supabase
         .from('credit_card_transactions')
         .select('*')
         .eq('user_id', uid)
         .order('created_at', { ascending: false });
       
-      if (ccTransactionsError) {
-        console.error('[loadUserData] Erro ao carregar transações de cartão:', ccTransactionsError);
-      }
-      
       if (ccTransactionsData) {
-        
         setCreditCardTransactions(ccTransactionsData.map(t => ({
           id: t.id,
           date: t.date,
@@ -225,7 +199,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         })));
       }
     } catch (error) {
-      console.error('[loadUserData] Erro ao carregar dados:', error);
+      console.error('Erro ao carregar dados:', error);
     }
   }, []);
 
@@ -256,53 +230,61 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Auth state listener
+  // Auth state listener - CORRIGIDO PARA EVITAR LOOPS
   useEffect(() => {
     let mounted = true;
 
-    // Verificar sessão atual
-    const initSession = async () => {
+    const initAuth = async () => {
+      // Evitar inicialização duplicada
+      if (initializingRef.current) return;
+      initializingRef.current = true;
+
       try {
-        
+        // Verificar sessão atual
         const { data: { session }, error } = await supabase.auth.getSession();
 
+        if (!mounted) return;
+
         if (error) {
-          console.error('[FinanceContext] Erro ao obter sessão:', error);
-          if (mounted) setLoading(false);
+          console.error('Erro ao obter sessão:', error);
+          setLoading(false);
           return;
         }
 
-        
+        setUser(session?.user ?? null);
 
-        if (mounted) {
-          setUser(session?.user ?? null);
-          if (session?.user) {
-            
-            await checkExpiration(session.user.id);
-            await loadUserData(session.user.id);
-            
-          }
-          setLoading(false);
+        if (session?.user) {
+          lastUserIdRef.current = session.user.id;
+          await checkExpiration(session.user.id);
+          await loadUserData(session.user.id);
         }
+        
+        setLoading(false);
       } catch (err) {
-        console.error('[FinanceContext] Erro na inicialização:', err);
+        console.error('Erro na inicialização:', err);
         if (mounted) setLoading(false);
       }
     };
 
-    initSession();
+    initAuth();
 
     // Escutar mudanças de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      
       if (!mounted) return;
+
+      const newUserId = session?.user?.id || null;
       
+      // Evitar processar o mesmo usuário múltiplas vezes
+      if (event === 'TOKEN_REFRESHED' && lastUserIdRef.current === newUserId) {
+        return;
+      }
+      
+      lastUserIdRef.current = newUserId;
       setUser(session?.user ?? null);
       
       if (session?.user) {
         // Criar registro na tabela users se não existir
         if (event === 'SIGNED_IN') {
-          
           try {
             const { data: existingUser } = await supabase
               .from('users')
@@ -311,7 +293,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
               .single();
             
             if (!existingUser) {
-              
               await supabase.from('users').insert({
                 id: session.user.id,
                 email: session.user.email!
@@ -319,15 +300,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
               await initDefaultData(session.user.id);
             }
           } catch (err) {
-            console.error('[AuthStateChange] Erro ao verificar usuário:', err);
+            console.error('Erro ao verificar usuário:', err);
           }
         }
-        
         
         await checkExpiration(session.user.id);
         await loadUserData(session.user.id);
       } else {
-        
         setIsExpired(false);
         setExpiresAt(null);
         setBanks([]);
@@ -336,6 +315,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         setTransactions([]);
         setCreditCardTransactions([]);
       }
+      
       setLoading(false);
     });
 
@@ -345,42 +325,33 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     };
   }, [checkExpiration, loadUserData]);
 
-  // Online status - verificar conexão com Supabase
+  // Online status
   useEffect(() => {
     let mounted = true;
     
-    const checkSupabaseConnection = async () => {
+    const checkConnection = async () => {
       try {
-        // Fazer uma query simples para verificar conexão
         const { error } = await supabase.from('banks').select('id').limit(1);
-        if (mounted) {
-          setIsOnline(!error);
-        }
+        if (mounted) setIsOnline(!error);
       } catch {
-        if (mounted) {
-          setIsOnline(false);
-        }
+        if (mounted) setIsOnline(false);
       }
     };
 
-    // Verificar conexão imediatamente
-    checkSupabaseConnection();
+    checkConnection();
+    const interval = setInterval(checkConnection, 30000);
 
-    // Verificar conexão a cada 30 segundos
-    const interval = setInterval(checkSupabaseConnection, 30000);
-
-    // Também escutar eventos de online/offline do navegador
-    const handleBrowserOnline = () => checkSupabaseConnection();
-    const handleBrowserOffline = () => setIsOnline(false);
+    const handleOnline = () => checkConnection();
+    const handleOffline = () => setIsOnline(false);
     
-    window.addEventListener('online', handleBrowserOnline);
-    window.addEventListener('offline', handleBrowserOffline);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
     
     return () => {
       mounted = false;
       clearInterval(interval);
-      window.removeEventListener('online', handleBrowserOnline);
-      window.removeEventListener('offline', handleBrowserOffline);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
@@ -393,7 +364,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const register = async (email: string, password: string) => {
     const normalizedEmail = email.toLowerCase().trim();
     
-    // Check if there's pending data for this email
     const { data: pendingData } = await supabase
       .from('pending_users')
       .select('*')
@@ -408,7 +378,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
     
     if (data.user) {
-      // Criar registro na tabela users
       if (pendingData) {
         await supabase.from('users').insert({
           id: data.user.id,
@@ -552,7 +521,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     await loadUserData(user.id);
   };
 
-  // Fatura do mês atual (sem lançamentos futuros)
   const getCardInvoice = (cardId: string) => {
     const now = new Date();
     const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -563,38 +531,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       .reduce((s, t) => s + t.value, 0);
   };
 
-  // Total de todos os lançamentos (para calcular limite disponível)
   const getCardTotalDebt = (cardId: string) => {
     return creditCardTransactions
       .filter(t => t.card === cardId)
       .reduce((s, t) => s + t.value, 0);
   };
 
-  // Função para garantir que a sessão está válida
-  const ensureValidSession = async () => {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    
-    if (error || !session) {
-      console.error('[ensureValidSession] Sessão inválida ou expirada:', error);
-      // Tentar refresh
-      const { data: { session: newSession }, error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError || !newSession) {
-        console.error('[ensureValidSession] Falha ao renovar sessão:', refreshError);
-        throw new Error('Sessão expirada. Por favor, faça login novamente.');
-      }
-      console.log('[ensureValidSession] Sessão renovada com sucesso');
-      return newSession;
-    }
-    
-    return session;
-  };
-
   // Transaction functions
   const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
-    if (!user) {
-      console.error('addTransaction: Usuário não está logado');
-      throw new Error('Usuário não está logado');
-    }
+    if (!user) throw new Error('Usuário não está logado');
     
     const { data, error } = await supabase.from('transactions').insert({
       user_id: user.id,
@@ -606,12 +551,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       value: transaction.value
     }).select().single();
     
-    if (error) {
-      console.error('addTransaction ERRO:', error);
-      throw error;
-    }
+    if (error) throw error;
     
-    // Adiciona localmente sem recarregar tudo (mais rápido)
     if (data) {
       setTransactions(prev => [{
         id: data.id,
@@ -637,17 +578,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     
     const { error } = await supabase.from('transactions').update(updateData).eq('id', id);
     if (error) throw error;
-    // Atualiza localmente sem recarregar tudo (mais rápido)
-    setTransactions(prev => prev.map(t => 
-      t.id === id ? { ...t, ...transaction } : t
-    ));
+    setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...transaction } : t));
   };
 
   const deleteTransaction = async (id: string) => {
     if (!user) return;
     const { error } = await supabase.from('transactions').delete().eq('id', id);
     if (error) throw error;
-    // Remove localmente sem recarregar tudo (mais rápido)
     setTransactions(prev => prev.filter(t => t.id !== id));
   };
 
@@ -664,7 +601,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       is_payment: transaction.isPayment
     }).select().single();
     if (error) throw error;
-    // Adiciona localmente sem recarregar tudo (mais rápido)
     if (data) {
       setCreditCardTransactions(prev => [{
         id: data.id,
@@ -690,17 +626,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     
     const { error } = await supabase.from('credit_card_transactions').update(updateData).eq('id', id);
     if (error) throw error;
-    // Atualiza localmente sem recarregar tudo (mais rápido)
-    setCreditCardTransactions(prev => prev.map(t => 
-      t.id === id ? { ...t, ...transaction } : t
-    ));
+    setCreditCardTransactions(prev => prev.map(t => t.id === id ? { ...t, ...transaction } : t));
   };
 
   const deleteCreditCardTransaction = async (id: string) => {
     if (!user) return;
     const { error } = await supabase.from('credit_card_transactions').delete().eq('id', id);
     if (error) throw error;
-    // Remove localmente sem recarregar tudo (mais rápido)
     setCreditCardTransactions(prev => prev.filter(t => t.id !== id));
   };
 
@@ -708,7 +640,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const payCardInvoice = async (cardId: string, bankId: string, value: number, date: string) => {
     if (!user) return;
     
-    // Add debit transaction
     const { error: error1 } = await supabase.from('transactions').insert({
       user_id: user.id,
       date,
@@ -720,7 +651,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     });
     if (error1) throw error1;
 
-    // Add credit card payment
     const { error: error2 } = await supabase.from('credit_card_transactions').insert({
       user_id: user.id,
       date,
