@@ -66,6 +66,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Refs para evitar loops
   const initializingRef = useRef(false);
   const lastUserIdRef = useRef<string | null>(null);
+  const lastEventRef = useRef<string | null>(null); // Rastrear último evento para evitar duplicados
 
   // Verificar expiração da conta
   const checkExpiration = useCallback(async (uid: string) => {
@@ -247,6 +248,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
         if (error) {
           console.error('Erro ao obter sessão:', error);
+          setUser(null);
           setLoading(false);
           return;
         }
@@ -262,7 +264,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       } catch (err) {
         console.error('Erro na inicialização:', err);
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setUser(null);
+          setLoading(false);
+        }
+      } finally {
+        // CRÍTICO: Permitir reinicialização após conclusão
+        initializingRef.current = false;
       }
     };
 
@@ -274,10 +282,22 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
       const newUserId = session?.user?.id || null;
       
-      // Evitar processar o mesmo usuário múltiplas vezes
-      if (event === 'TOKEN_REFRESHED' && lastUserIdRef.current === newUserId) {
+      // Ignorar TOKEN_REFRESHED - não precisa recarregar dados
+      if (event === 'TOKEN_REFRESHED') {
         return;
       }
+      
+      // Ignorar INITIAL_SESSION - já foi processado no initAuth()
+      if (event === 'INITIAL_SESSION') {
+        return;
+      }
+      
+      // Evitar processar o mesmo evento/usuário múltiplas vezes em sequência
+      const eventKey = `${event}-${newUserId}`;
+      if (lastEventRef.current === eventKey) {
+        return;
+      }
+      lastEventRef.current = eventKey;
       
       lastUserIdRef.current = newUserId;
       setUser(session?.user ?? null);
@@ -321,6 +341,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false;
+      initializingRef.current = false;
+      lastEventRef.current = null;
       subscription.unsubscribe();
     };
   }, [checkExpiration, loadUserData]);
