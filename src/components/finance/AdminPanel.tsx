@@ -44,16 +44,26 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
 
       if (usersError) throw usersError;
 
-      const usersList: AdminUser[] = (usersData || []).map((u: { id: string; email: string; created_at: string; expires_at: string | null }) => ({
-        uid: u.id,
-        email: u.email || 'Sem email',
-        createdAt: u.created_at || new Date().toISOString(),
-        lastLogin: undefined,
-        // Comparação case-insensitive para verificar se é admin
-        isAdmin: ADMIN_EMAILS.map(e => e.toLowerCase()).includes((u.email || '').toLowerCase()),
-        expiresAt: u.expires_at || null
-      }));
-      
+      // Lista de emails admin em lowercase para comparação
+      const adminEmailsLower = ADMIN_EMAILS.map(e => e.toLowerCase());
+
+      const usersList: AdminUser[] = (usersData || []).map((u: { id: string; email: string; created_at: string; expires_at: string | null }) => {
+        const userEmail = (u.email || '').toLowerCase();
+        const isUserAdmin = adminEmailsLower.includes(userEmail);
+
+        // Debug
+        console.log(`[AdminPanel] Usuário: ${u.email}, IsAdmin: ${isUserAdmin}, AdminEmails:`, adminEmailsLower);
+
+        return {
+          uid: u.id,
+          email: u.email || 'Sem email',
+          createdAt: u.created_at || new Date().toISOString(),
+          lastLogin: undefined,
+          isAdmin: isUserAdmin,
+          expiresAt: u.expires_at || null
+        };
+      });
+
       setUsers(usersList.sort((a, b) => a.email.localeCompare(b.email)));
 
       // Load pending users
@@ -70,7 +80,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
         createdAt: p.created_at,
         createdBy: p.created_by || ''
       }));
-      
+
       setPendingUsers(pendingList.sort((a, b) => a.email.localeCompare(b.email)));
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
