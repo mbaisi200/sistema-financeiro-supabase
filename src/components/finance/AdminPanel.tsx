@@ -133,7 +133,19 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       const result = await response.json();
 
       if (!response.ok) {
-        showNotification(result.error || 'Erro ao criar usuário', 'error');
+        // Se tem instruções de configuração, mostrar alerta especial
+        if (result.instructions) {
+          showNotification('⚠️ Configure a Service Role Key no servidor. Veja instruções no console.', 'error');
+          console.error('=== CONFIGURAÇÃO NECESSÁRIA ===');
+          console.error(result.error);
+          console.error('Passo 1:', result.instructions.step1);
+          console.error('Passo 2:', result.instructions.step2);
+          console.error('Passo 3:', result.instructions.step3);
+          console.error('Passo 4:', result.instructions.step4);
+          alert(`${result.error}\n\n${result.instructions.step1}\n${result.instructions.step2}\n${result.instructions.step3}\n${result.instructions.step4}`);
+        } else {
+          showNotification(result.error || 'Erro ao criar usuário', 'error');
+        }
         setLoading(false);
         return;
       }

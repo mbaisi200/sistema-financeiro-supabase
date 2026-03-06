@@ -21,18 +21,32 @@ export async function POST(request: NextRequest) {
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    // Usar Service Role Key se disponível, senão usar Anon Key
-    const supabaseKey = supabaseServiceKey || supabaseAnonKey;
+    // Verificar se tem Service Role Key
     const hasServiceRole = !!supabaseServiceKey;
 
-    if (!supabaseUrl || !supabaseKey) {
+    if (!supabaseUrl) {
+      console.error('NEXT_PUBLIC_SUPABASE_URL não definido');
       return NextResponse.json(
-        { error: 'Configuração do servidor incompleta. Verifique as variáveis de ambiente do Supabase.' },
+        { error: 'Configuração do servidor incompleta: URL do Supabase não definida.' },
         { status: 500 }
       );
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
+    // Se não tem Service Role Key, retorna instrução
+    if (!hasServiceRole) {
+      return NextResponse.json({
+        error: '⚠️ Configuração necessária: SUPABASE_SERVICE_ROLE_KEY não definida.',
+        instructions: {
+          step1: 'Acesse: https://supabase.com/dashboard/project/nqvlgvgxzfkskwwrshpj/settings/api',
+          step2: 'Copie a chave "service_role" (NÃO a anon key)',
+          step3: 'Adicione ao arquivo .env.local: SUPABASE_SERVICE_ROLE_KEY=sua_chave_aqui',
+          step4: 'Reinicie o servidor'
+        },
+        note: 'A Service Role Key é necessária para criar usuários via API.'
+      }, { status: 500 });
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey!, {
       auth: {
         autoRefreshToken: false,
         persistSession: false
@@ -69,11 +83,15 @@ export async function POST(request: NextRequest) {
       }
 
       // Verificar se o usuário já existe na tabela users
-      const { data: existingUser } = await supabaseAdmin
+      const { data: existingUser, error: existingUserError } = await supabaseAdmin
         .from('users')
         .select('id, email')
         .eq('email', normalizedEmail)
-        .single();
+        .maybeSingle();
+
+      if (existingUserError) {
+        console.error('Erro ao verificar usuário existente:', existingUserError);
+      }
 
       if (existingUser) {
         return NextResponse.json(
@@ -82,122 +100,67 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Verificar se já está na lista de pendentes
-      const { data: existingPending } = await supabaseAdmin
-        .from('pending_users')
-        .select('id')
-        .eq('email', normalizedEmail)
-        .single();
+      // Criar usuário no Supabase Auth
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: normalizedEmail,
+        password: password,
+        email_confirm: true
+      });
 
-      if (existingPending) {
-        // Atualizar o registro pendente existente
-        const { error: updateError } = await supabaseAdmin
-          .from('pending_users')
-          .update({
-            created_by: adminEmail,
-            expires_at: expiresAt || null
-          })
-          .eq('id', existingPending.id);
-
-        if (updateError) {
-          console.error('Error updating pending user:', updateError);
+      if (authError) {
+        console.error('Supabase Auth Error:', authError);
+        if (authError.message.includes('already been registered')) {
           return NextResponse.json(
-            { error: 'Erro ao atualizar convite pendente.' },
-            { status: 500 }
-          );
-        }
-
-        return NextResponse.json({
-          success: true,
-          email: normalizedEmail,
-          message: 'Convite atualizado! O usuário deve se registrar com este email e a senha fornecida.',
-          requiresRegistration: true
-        });
-      }
-
-      if (hasServiceRole) {
-        // Método com Service Role Key: criação direta
-        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-          email: normalizedEmail,
-          password: password,
-          email_confirm: true
-        });
-
-        if (authError) {
-          console.error('Supabase Auth Error:', authError);
-          if (authError.message.includes('already been registered')) {
-            return NextResponse.json(
-              { error: 'Este email já está cadastrado no sistema.' },
-              { status: 400 }
-            );
-          }
-          return NextResponse.json(
-            { error: authError.message || 'Erro ao criar usuário' },
+            { error: 'Este email já está cadastrado no sistema de autenticação.' },
             { status: 400 }
           );
         }
+        return NextResponse.json(
+          { error: authError.message || 'Erro ao criar usuário' },
+          { status: 400 }
+        );
+      }
 
-        const newUid = authData.user.id;
+      const newUid = authData.user.id;
 
-        // Atualizar documento do usuário com dados adicionais
-        await supabaseAdmin.from('users').update({
+      // Criar/atualizar registro na tabela users
+      const { error: userInsertError } = await supabaseAdmin
+        .from('users')
+        .upsert({
+          id: newUid,
+          email: normalizedEmail,
           created_by: adminEmail,
           expires_at: expiresAt || null
-        }).eq('id', newUid);
-
-        // Inicializar dados padrão
-        for (const bank of Object.values(DEFAULT_BANKS)) {
-          await supabaseAdmin.from('banks').insert({
-            user_id: newUid,
-            name: bank.name,
-            icon: bank.icon,
-            initial_balance: bank.initialBalance
-          });
-        }
-
-        for (const cat of Object.values(DEFAULT_CATEGORIES)) {
-          await supabaseAdmin.from('categories').insert({
-            user_id: newUid,
-            name: cat.name,
-            icon: cat.icon
-          });
-        }
-
-        return NextResponse.json({
-          success: true,
-          uid: newUid,
-          email: normalizedEmail,
-          message: 'Usuário criado com sucesso!'
         });
-      } else {
-        // Método sem Service Role Key: criar registro pendente
-        // O usuário deve se registrar com o email e senha fornecidos
-        const { error: pendingError } = await supabaseAdmin
-          .from('pending_users')
-          .insert({
-            email: normalizedEmail,
-            created_by: adminEmail,
-            expires_at: expiresAt || null,
-            default_banks: DEFAULT_BANKS,
-            default_categories: DEFAULT_CATEGORIES
-          });
 
-        if (pendingError) {
-          console.error('Error creating pending user:', pendingError);
-          return NextResponse.json(
-            { error: 'Erro ao criar convite. Tente novamente.' },
-            { status: 500 }
-          );
-        }
-
-        return NextResponse.json({
-          success: true,
-          email: normalizedEmail,
-          message: 'Convite criado! O usuário deve se registrar usando este email e a senha fornecida.',
-          requiresRegistration: true,
-          note: 'O usuário precisa acessar o sistema e clicar em "Criar conta" para completar o registro.'
-        });
+      if (userInsertError) {
+        console.error('Erro ao criar registro de usuário:', userInsertError);
       }
+
+      // Inicializar dados padrão
+      for (const bank of Object.values(DEFAULT_BANKS)) {
+        await supabaseAdmin.from('banks').insert({
+          user_id: newUid,
+          name: bank.name,
+          icon: bank.icon,
+          initial_balance: bank.initialBalance
+        }).select();
+      }
+
+      for (const cat of Object.values(DEFAULT_CATEGORIES)) {
+        await supabaseAdmin.from('categories').insert({
+          user_id: newUid,
+          name: cat.name,
+          icon: cat.icon
+        }).select();
+      }
+
+      return NextResponse.json({
+        success: true,
+        uid: newUid,
+        email: normalizedEmail,
+        message: 'Usuário criado com sucesso!'
+      });
 
     } else if (operation === 'update') {
       // Atualizar usuário existente
@@ -214,10 +177,21 @@ export async function POST(request: NextRequest) {
         updateData.expires_at = expiresAt || null;
       }
 
-      await supabaseAdmin.from('users').update(updateData).eq('id', uid);
+      const { error: updateError } = await supabaseAdmin
+        .from('users')
+        .update(updateData)
+        .eq('id', uid);
 
-      // Se fornecer senha e tiver Service Role Key, atualizar via Supabase Auth
-      if (password && password.length >= 6 && hasServiceRole) {
+      if (updateError) {
+        console.error('Erro ao atualizar usuário:', updateError);
+        return NextResponse.json(
+          { error: 'Erro ao atualizar usuário.' },
+          { status: 500 }
+        );
+      }
+
+      // Se fornecer senha, atualizar via Supabase Auth
+      if (password && password.length >= 6) {
         await supabaseAdmin.auth.admin.updateUserById(uid, {
           password: password
         });
@@ -236,7 +210,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error:', error);
     return NextResponse.json(
-      { error: 'Erro interno no servidor' },
+      { error: 'Erro interno no servidor: ' + (error instanceof Error ? error.message : 'Erro desconhecido') },
       { status: 500 }
     );
   }
@@ -248,15 +222,12 @@ export async function GET(request: NextRequest) {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    const supabaseKey = supabaseServiceKey || supabaseAnonKey;
-
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ error: 'Configuração incompleta.' }, { status: 500 });
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json({ error: 'Configuração incompleta: SUPABASE_SERVICE_ROLE_KEY necessária.' }, { status: 500 });
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     });
 
