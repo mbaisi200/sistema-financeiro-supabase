@@ -124,17 +124,21 @@ export async function POST(request: NextRequest) {
       const newUid = authData.user.id;
 
       // Criar/atualizar registro na tabela users
-      const { error: userInsertError } = await supabaseAdmin
+      const { data: insertedUser, error: userInsertError } = await supabaseAdmin
         .from('users')
         .upsert({
           id: newUid,
           email: normalizedEmail,
           created_by: adminEmail,
           expires_at: expiresAt || null
-        });
+        })
+        .select();
 
       if (userInsertError) {
         console.error('Erro ao criar registro de usuário:', userInsertError);
+        // Não falha aqui, o usuário foi criado no Auth
+      } else {
+        console.log('Usuário criado na tabela users:', insertedUser);
       }
 
       // Inicializar dados padrão

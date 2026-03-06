@@ -282,6 +282,34 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
     setEditExpiresAt(u.expiresAt || '');
   };
 
+  // Sincronizar usuários do Auth com a tabela users
+  const handleSyncUsers = async () => {
+    if (!confirm('Deseja sincronizar os usuários do sistema de autenticação com a tabela de usuários?\n\nIsso vai adicionar usuários que estão no Auth mas não aparecem na lista.')) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/admin/sync-users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminEmail: user?.email })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        showNotification(result.error || 'Erro ao sincronizar', 'error');
+      } else {
+        showNotification(`✅ Sincronizado! ${result.synced} usuário(s) adicionado(s).`, 'success');
+        console.log('[SYNC] Resultado:', result);
+        loadUsers();
+      }
+    } catch (error) {
+      console.error('Erro ao sincronizar:', error);
+      showNotification('Erro ao sincronizar usuários', 'error');
+    }
+    setLoading(false);
+  };
+
   const filteredUsers = users.filter(u => 
     u.email.toLowerCase().includes(searchEmail.toLowerCase())
   );
@@ -304,7 +332,17 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
 
   return (
     <div className="card">
-      <h3 style={{ marginBottom: '1rem' }}>👑 Painel de Administração</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h3 style={{ margin: 0 }}>👑 Painel de Administração</h3>
+        <button
+          className="btn btn-sm btn-secondary"
+          onClick={handleSyncUsers}
+          disabled={loading}
+          title="Sincroniza usuários do Auth com a tabela users"
+        >
+          🔄 Sincronizar
+        </button>
+      </div>
       
       {/* Create User */}
       <div style={{ marginBottom: '2rem', padding: '1rem', background: '#f0f9ff', borderRadius: '0.5rem', border: '2px solid #3b82f6' }}>
