@@ -316,12 +316,12 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
     try {
       const response = await fetch(`/api/admin/debug-users?adminEmail=${user?.email}`);
       const result = await response.json();
-      
+
       console.log('=== DEBUG USUÁRIOS ===');
       console.log('Auth users:', result.auth);
       console.log('Table users:', result.table);
       console.log('Missing in table:', result.comparison?.missingInTable);
-      
+
       alert(
         `📊 DEBUG:\n\n` +
         `Auth: ${result.auth?.count} usuários\n` +
@@ -332,6 +332,59 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       console.error('Erro no debug:', error);
       alert('Erro ao buscar debug. Veja o console (F12).');
     }
+  };
+
+  // Popular dados de demonstração
+  const handleSeedDemo = async (targetEmail: string) => {
+    const confirm = window.confirm(
+      `📊 POPULAR DADOS DE DEMONSTRAÇÃO\n\n` +
+      `Isso irá criar dados fictícios para o usuário:\n` +
+      `${targetEmail}\n\n` +
+      `Incluindo:\n` +
+      `• 8 Bancos\n` +
+      `• 40 Categorias\n` +
+      `• 5 Cartões de Crédito\n` +
+      `• ~130 Transações Bancárias\n` +
+      `• ~110 Transações de Cartão\n\n` +
+      `⚠️ Dados existentes serão APAGADOS!\n\n` +
+      `Deseja continuar?`
+    );
+
+    if (!confirm) return;
+
+    setLoading(true);
+    showNotification('⏳ Criando dados de demonstração...', 'success');
+
+    try {
+      const response = await fetch('/api/seed-demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminEmail: user?.email,
+          targetEmail: targetEmail
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        showNotification(result.error || 'Erro ao criar dados', 'error');
+      } else {
+        showNotification(
+          `✅ Dados criados!\n` +
+          `Bancos: ${result.summary.banks}\n` +
+          `Categorias: ${result.summary.categories}\n` +
+          `Cartões: ${result.summary.creditCards}\n` +
+          `Transações: ${result.summary.bankTransactions + result.summary.creditCardTransactions}`,
+          'success'
+        );
+      }
+    } catch (error) {
+      console.error('Erro ao popular dados:', error);
+      showNotification('Erro ao criar dados de demonstração', 'error');
+    }
+
+    setLoading(false);
   };
 
   const filteredUsers = users.filter(u => 
@@ -519,13 +572,22 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
                     </td>
                     <td>
                       {!u.isAdmin ? (
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'nowrap' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <button
                             className="btn btn-sm"
                             style={{ background: '#3b82f6', color: 'white', whiteSpace: 'nowrap' }}
                             onClick={() => openEditModal(u)}
                           >
                             ✏️ Editar
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            style={{ background: '#8b5cf6', color: 'white', whiteSpace: 'nowrap' }}
+                            onClick={() => handleSeedDemo(u.email)}
+                            disabled={loading}
+                            title="Popular dados de demonstração"
+                          >
+                            📊 Demo
                           </button>
                           <button
                             className="btn btn-sm btn-danger"
