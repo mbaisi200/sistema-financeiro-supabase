@@ -30,31 +30,29 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
   const [editModal, setEditModal] = useState<EditModalData | null>(null);
   const [editExpiresAt, setEditExpiresAt] = useState('');
 
-  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email);
+  const isAdmin = user?.email && ADMIN_EMAILS.map(e => e.toLowerCase()).includes(user.email.toLowerCase());
 
   const loadUsers = async () => {
     if (!user || !isAdmin) return;
     setLoading(true);
     try {
-      console.log('[AdminPanel] Carregando usuários...');
+      console.log('[AdminPanel] Carregando usuários via API...');
 
-      // Load registered users
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('*')
-        .order('email');
+      // Usar API com Service Role Key para ignorar RLS
+      const response = await fetch(`/api/admin/list-users?adminEmail=${encodeURIComponent(user.email)}`);
 
-      if (usersError) {
-        console.error('[AdminPanel] Erro ao carregar usuários:', usersError);
-        throw usersError;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao carregar usuários');
       }
 
-      console.log('[AdminPanel] Usuários encontrados:', usersData?.length || 0);
+      const data = await response.json();
+      console.log('[AdminPanel] Usuários encontrados:', data.users?.length || 0);
 
       // Lista de emails admin em lowercase para comparação
       const adminEmailsLower = ADMIN_EMAILS.map(e => e.toLowerCase());
 
-      const usersList: AdminUser[] = (usersData || []).map((u: { id: string; email: string; created_at: string; expires_at: string | null }) => {
+      const usersList: AdminUser[] = (data.users || []).map((u: { id: string; email: string; created_at: string; expires_at: string | null }) => {
         const userEmail = (u.email || '').toLowerCase();
         const isUserAdmin = adminEmailsLower.includes(userEmail);
 
@@ -70,17 +68,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
 
       setUsers(usersList.sort((a, b) => a.email.localeCompare(b.email)));
 
-      // Load pending users
-      const { data: pendingData, error: pendingError } = await supabase
-        .from('pending_users')
-        .select('*')
-        .order('email');
-
-      if (pendingError) {
-        console.error('[AdminPanel] Erro ao carregar pendentes:', pendingError);
-      }
-
-      const pendingList: PendingUser[] = (pendingData || []).map((p: { id: string; email: string; created_at: string; created_by: string | null }) => ({
+      const pendingList: PendingUser[] = (data.pendingUsers || []).map((p: { id: string; email: string; created_at: string; created_by: string | null }) => ({
         id: p.id,
         email: p.email,
         createdAt: p.created_at,
