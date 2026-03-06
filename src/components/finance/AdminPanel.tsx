@@ -36,13 +36,20 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
     if (!user || !isAdmin) return;
     setLoading(true);
     try {
+      console.log('[AdminPanel] Carregando usuários...');
+
       // Load registered users
       const { data: usersData, error: usersError } = await supabase
         .from('users')
         .select('*')
         .order('email');
 
-      if (usersError) throw usersError;
+      if (usersError) {
+        console.error('[AdminPanel] Erro ao carregar usuários:', usersError);
+        throw usersError;
+      }
+
+      console.log('[AdminPanel] Usuários encontrados:', usersData?.length || 0);
 
       // Lista de emails admin em lowercase para comparação
       const adminEmailsLower = ADMIN_EMAILS.map(e => e.toLowerCase());
@@ -50,9 +57,6 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       const usersList: AdminUser[] = (usersData || []).map((u: { id: string; email: string; created_at: string; expires_at: string | null }) => {
         const userEmail = (u.email || '').toLowerCase();
         const isUserAdmin = adminEmailsLower.includes(userEmail);
-
-        // Debug
-        console.log(`[AdminPanel] Usuário: ${u.email}, IsAdmin: ${isUserAdmin}, AdminEmails:`, adminEmailsLower);
 
         return {
           uid: u.id,
@@ -72,7 +76,9 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
         .select('*')
         .order('email');
 
-      if (pendingError) throw pendingError;
+      if (pendingError) {
+        console.error('[AdminPanel] Erro ao carregar pendentes:', pendingError);
+      }
 
       const pendingList: PendingUser[] = (pendingData || []).map((p: { id: string; email: string; created_at: string; created_by: string | null }) => ({
         id: p.id,
@@ -83,15 +89,19 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
 
       setPendingUsers(pendingList.sort((a, b) => a.email.localeCompare(b.email)));
     } catch (error) {
-      console.error('Erro ao carregar usuários:', error);
+      console.error('[AdminPanel] Erro ao carregar:', error);
       showNotification('Erro ao carregar usuários', 'error');
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    loadUsers();
-  }, [user]);
+    // Só carrega uma vez quando o usuário muda
+    if (user && isAdmin) {
+      loadUsers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // Só depende do ID do usuário, não do objeto inteiro
 
   // Verificar se usuário está expirado
   const isUserExpired = (expiresAt: string | null | undefined) => {
@@ -284,10 +294,9 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
 
   // Sincronizar usuários do Auth com a tabela users
   const handleSyncUsers = async () => {
-    if (!confirm('Deseja sincronizar os usuários do sistema de autenticação com a tabela de usuários?\n\nIsso vai adicionar usuários que estão no Auth mas não aparecem na lista.')) return;
+    if (!confirm('Deseja sincronizar os usuários do sistema de autenticação com a tabela de usuários?')) return;
 
     setLoading(true);
-    showNotification('Sincronizando...', 'success');
     
     try {
       const response = await fetch('/api/admin/sync-users', {
@@ -297,18 +306,18 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       });
 
       const result = await response.json();
-      console.log('[SYNC] Resposta completa:', result);
+      console.log('[SYNC] Resposta:', result);
 
       if (!response.ok) {
         showNotification(result.error || 'Erro ao sincronizar', 'error');
       } else {
         showNotification(`✅ Auth: ${result.authUsers}, Tabela: ${result.tableUsers}, Sincronizados: ${result.synced}`, 'success');
-        // Recarregar página ao invés de loadUsers
-        setTimeout(() => window.location.reload(), 1500);
+        // Recarregar lista de usuários (não a página toda)
+        await loadUsers();
       }
     } catch (error) {
       console.error('Erro ao sincronizar:', error);
-      showNotification('Erro ao sincronizar. Verifique o console (F12).', 'error');
+      showNotification('Erro ao sincronizar', 'error');
     }
     
     setLoading(false);
