@@ -287,6 +287,8 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
     if (!confirm('Deseja sincronizar os usuários do sistema de autenticação com a tabela de usuários?\n\nIsso vai adicionar usuários que estão no Auth mas não aparecem na lista.')) return;
 
     setLoading(true);
+    showNotification('Sincronizando...', 'success');
+    
     try {
       const response = await fetch('/api/admin/sync-users', {
         method: 'POST',
@@ -295,19 +297,43 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       });
 
       const result = await response.json();
+      console.log('[SYNC] Resposta completa:', result);
 
       if (!response.ok) {
         showNotification(result.error || 'Erro ao sincronizar', 'error');
       } else {
-        showNotification(`✅ Sincronizado! ${result.synced} usuário(s) adicionado(s).`, 'success');
-        console.log('[SYNC] Resultado:', result);
-        loadUsers();
+        showNotification(`✅ Auth: ${result.authUsers}, Tabela: ${result.tableUsers}, Sincronizados: ${result.synced}`, 'success');
+        // Recarregar página ao invés de loadUsers
+        setTimeout(() => window.location.reload(), 1500);
       }
     } catch (error) {
       console.error('Erro ao sincronizar:', error);
-      showNotification('Erro ao sincronizar usuários. Verifique o console.', 'error');
-    } finally {
-      setLoading(false);
+      showNotification('Erro ao sincronizar. Verifique o console (F12).', 'error');
+    }
+    
+    setLoading(false);
+  };
+
+  // Debug - ver usuários
+  const handleDebugUsers = async () => {
+    try {
+      const response = await fetch(`/api/admin/debug-users?adminEmail=${user?.email}`);
+      const result = await response.json();
+      
+      console.log('=== DEBUG USUÁRIOS ===');
+      console.log('Auth users:', result.auth);
+      console.log('Table users:', result.table);
+      console.log('Missing in table:', result.comparison?.missingInTable);
+      
+      alert(
+        `📊 DEBUG:\n\n` +
+        `Auth: ${result.auth?.count} usuários\n` +
+        `Tabela: ${result.table?.count} usuários\n\n` +
+        `Faltando na tabela: ${JSON.stringify(result.comparison?.missingInTable, null, 2)}`
+      );
+    } catch (error) {
+      console.error('Erro no debug:', error);
+      alert('Erro ao buscar debug. Veja o console (F12).');
     }
   };
 
@@ -335,14 +361,23 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h3 style={{ margin: 0 }}>👑 Painel de Administração</h3>
-        <button
-          className="btn btn-sm btn-secondary"
-          onClick={handleSyncUsers}
-          disabled={loading}
-          title="Sincroniza usuários do Auth com a tabela users"
-        >
-          🔄 Sincronizar
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={handleDebugUsers}
+            title="Ver usuários do Auth e tabela"
+          >
+            🔍 Debug
+          </button>
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={handleSyncUsers}
+            disabled={loading}
+            title="Sincroniza usuários do Auth com a tabela users"
+          >
+            🔄 Sincronizar
+          </button>
+        </div>
       </div>
       
       {/* Create User */}
