@@ -3,33 +3,44 @@
 import React, { useState } from 'react';
 import { toUpperCase } from '@/lib/types';
 
-export function ChangePasswordModal({ 
-  isOpen, 
-  onClose, 
+export function ChangePasswordModal({
+  isOpen,
+  onClose,
   onChangePassword,
-  showNotification 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
+  showNotification
+}: {
+  isOpen: boolean;
+  onClose: () => void;
   onChangePassword: (password: string) => Promise<void>;
   showNotification: (msg: string, type: 'success' | 'error') => void;
 }) {
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (password.length < 6) {
-      showNotification('Senha deve ter pelo menos 6 caracteres', 'error');
+      showNotification('A senha deve ter pelo menos 6 caracteres', 'error');
       return;
     }
+
+    if (password !== confirmPassword) {
+      showNotification('As senhas nÃ£o coincidem', 'error');
+      return;
+    }
+
     setLoading(true);
     try {
       await onChangePassword(password);
       showNotification('Senha alterada com sucesso!', 'success');
+      setPassword('');
+      setConfirmPassword('');
       onClose();
-    } catch (error) {
-      showNotification('Erro ao alterar senha', 'error');
+    } catch (error: any) {
+      console.error('Erro ao alterar senha:', error);
+      showNotification(error.message || 'Erro ao alterar senha', 'error');
     }
     setLoading(false);
   };
@@ -40,18 +51,30 @@ export function ChangePasswordModal({
     <div className="modal active" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>🔒 Trocar Senha</div>
-          <button className="close-modal" onClick={onClose}>×</button>
+          <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>🔒 Alterar Senha</div>
+          <button className="close-modal" onClick={onClose}>Ã—</button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="form-group mb-4">
             <label className="form-label">Nova Senha</label>
-            <input 
-              type="password" 
-              className="form-input" 
-              value={password} 
+            <input
+              type="password"
+              className="form-input"
+              value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="MÃnimo 6 caracteres"
+              required
+              minLength={6}
+            />
+          </div>
+          <div className="form-group mb-4">
+            <label className="form-label">Confirmar Senha</label>
+            <input
+              type="password"
+              className="form-input"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="Digite novamente"
               required
               minLength={6}
             />
@@ -59,7 +82,7 @@ export function ChangePasswordModal({
           <div className="flex-end">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Salvando...' : 'Atualizar'}
+              {loading ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         </form>

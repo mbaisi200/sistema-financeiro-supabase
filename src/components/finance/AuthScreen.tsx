@@ -4,8 +4,7 @@ import React, { useState } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
 
 export function AuthScreen() {
-  const { login, register } = useFinance();
-  const [isLogin, setIsLogin] = useState(true);
+  const { login } = useFinance();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,8 +15,7 @@ export function AuthScreen() {
     setLoading(true);
     setError('');
     try {
-      if (isLogin) await login(email, password);
-      else await register(email, password);
+      await login(email, password);
     } catch (err: any) {
       setError(err.message);
     }
@@ -144,28 +142,8 @@ export function AuthScreen() {
                 transition: 'opacity 0.2s'
               }}
             >
-              {loading ? '⏳ Carregando...' : (isLogin ? '🚪 Entrar' : '✨ Criar Conta')}
+              {loading ? '⏳ Carregando...' : '🚪 Entrar'}
             </button>
-
-            <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-              <span style={{ color: '#6b7280' }}>
-                {isLogin ? 'Não tem conta?' : 'Já tem conta?'}
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsLogin(!isLogin)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#3b82f6',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  marginLeft: '0.25rem'
-                }}
-              >
-                {isLogin ? 'Criar conta' : 'Fazer login'}
-              </button>
-            </div>
 
             <hr style={{ margin: '1.5rem 0', border: 'none', borderTop: '1px solid #e5e7eb' }} />
 
