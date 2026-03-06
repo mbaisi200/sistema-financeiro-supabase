@@ -305,9 +305,10 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       }
     } catch (error) {
       console.error('Erro ao sincronizar:', error);
-      showNotification('Erro ao sincronizar usuários', 'error');
+      showNotification('Erro ao sincronizar usuários. Verifique o console.', 'error');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const filteredUsers = users.filter(u => 
