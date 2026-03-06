@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
 import { AuthScreen } from '@/components/finance/AuthScreen';
 import { Dashboard } from '@/components/finance/Dashboard';
@@ -14,11 +14,15 @@ import { ChangePasswordModal } from '@/components/finance/Modals';
 import { ADMIN_EMAILS } from '@/lib/types';
 
 function AppContent() {
-  const { user, loading, logout, isOnline, banks, getBankBalance, changePassword, isExpired, expiresAt } = useFinance();
+  const { user, loading, logout, isOnline, banks, getBankBalance, changePassword, isExpired, expiresAt, transactions, categories, creditCards, creditCardTransactions, exportToJSON } = useFinance();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreMode, setRestoreMode] = useState<'merge' | 'replace'>('merge');
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
@@ -105,6 +109,84 @@ function AppContent() {
     showNotification('JSON exportado!', 'success');
   };
 
+  // Backup - Exportar todos os dados
+  const handleBackup = async () => {
+    if (!user) return;
+    setBackupLoading(true);
+    try {
+      const response = await fetch(`/api/backup?user_id=${user.id}`);
+      const backup = await response.json();
+
+      if (!response.ok) {
+        throw new Error(backup.error || 'Erro ao criar backup');
+      }
+
+      // Criar arquivo para download
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup-financeiro-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showNotification(`✅ Backup criado! ${backup.stats.transactions} transações, ${backup.stats.banks} bancos, ${backup.stats.categories} categorias.`, 'success');
+      setShowBackupModal(false);
+    } catch (error) {
+      console.error('Erro no backup:', error);
+      showNotification('Erro ao criar backup', 'error');
+    }
+    setBackupLoading(false);
+  };
+
+  // Restore - Importar backup
+  const handleRestore = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    setBackupLoading(true);
+    try {
+      const text = await file.text();
+      const backup = JSON.parse(text);
+
+      // Validar formato do backup
+      if (!backup.data) {
+        throw new Error('Formato de backup inválido');
+      }
+
+      const response = await fetch('/api/backup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          data: backup.data,
+          mode: restoreMode
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao restaurar backup');
+      }
+
+      showNotification(`✅ Backup restaurado! ${result.results.transactions.inserted} transações importadas.`, 'success');
+      setShowBackupModal(false);
+      // Recarregar página para atualizar dados
+      window.location.reload();
+    } catch (error) {
+      console.error('Erro no restore:', error);
+      showNotification('Erro ao restaurar backup: ' + (error instanceof Error ? error.message : 'Erro desconhecido'), 'error');
+    }
+    setBackupLoading(false);
+    // Limpar input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'lancamentos', label: 'Lançamentos', icon: '📝' },
@@ -161,6 +243,11 @@ function AppContent() {
           <button className="btn btn-sm btn-secondary" onClick={() => setShowPasswordModal(true)} title="Alterar senha">
             🔒 Senha
           </button>
+
+          {/* Botão Backup */}
+          <button className="btn btn-sm btn-secondary" onClick={() => setShowBackupModal(true)} title="Backup e Restore">
+            💾 Backup
+          </button>
           
           <div className="export-menu-container">
             <button className="btn btn-sm btn-secondary" onClick={() => setShowExportMenu(!showExportMenu)}>
@@ -213,12 +300,135 @@ function AppContent() {
       )}
 
       {/* Password Modal */}
-      <ChangePasswordModal 
-        isOpen={showPasswordModal} 
-        onClose={() => setShowPasswordModal(false)} 
+      <ChangePasswordModal
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
         onChangePassword={changePassword}
         showNotification={showNotification}
       />
+
+      {/* Backup Modal */}
+      {showBackupModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '0.5rem',
+            maxWidth: '500px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0 }}>💾 Backup e Restore</h3>
+              <button
+                onClick={() => setShowBackupModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Seção de Backup */}
+            <div style={{ marginBottom: '2rem', padding: '1rem', background: '#f0f9ff', borderRadius: '0.5rem', border: '2px solid #3b82f6' }}>
+              <h4 style={{ margin: '0 0 1rem 0', color: '#3b82f6' }}>📤 Criar Backup</h4>
+              <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '1rem' }}>
+                Exporta todos os seus dados (transações, bancos, categorias, cartões) em um arquivo JSON.
+                Guarde este arquivo em local seguro para poder restaurar seus dados no futuro.
+              </p>
+              <button
+                className="btn btn-primary"
+                onClick={handleBackup}
+                disabled={backupLoading}
+                style={{ width: '100%' }}
+              >
+                {backupLoading ? 'Criando backup...' : '📥 Baixar Backup'}
+              </button>
+            </div>
+
+            {/* Seção de Restore */}
+            <div style={{ padding: '1rem', background: '#fef3c7', borderRadius: '0.5rem', border: '2px solid #f59e0b' }}>
+              <h4 style={{ margin: '0 0 1rem 0', color: '#92400e' }}>📥 Restaurar Backup</h4>
+              <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '1rem' }}>
+                Importa dados de um arquivo de backup anterior.
+              </p>
+
+              {/* Modo de Restore */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                  Modo de importação:
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="restoreMode"
+                    value="merge"
+                    checked={restoreMode === 'merge'}
+                    onChange={() => setRestoreMode('merge')}
+                  />
+                  <span>
+                    <strong>Mesclar</strong> - Adiciona aos dados existentes
+                  </span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="restoreMode"
+                    value="replace"
+                    checked={restoreMode === 'replace'}
+                    onChange={() => setRestoreMode('replace')}
+                  />
+                  <span>
+                    <strong>Substituir</strong> - Apaga tudo e importa (⚠️ perigoso)
+                  </span>
+                </label>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleRestore}
+                style={{ display: 'none' }}
+                id="backup-file-input"
+              />
+              <label
+                htmlFor="backup-file-input"
+                className="btn btn-secondary"
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'center',
+                  cursor: backupLoading ? 'wait' : 'pointer',
+                  background: restoreMode === 'replace' ? '#ef4444' : undefined,
+                  color: restoreMode === 'replace' ? 'white' : undefined
+                }}
+              >
+                {backupLoading ? 'Restaurando...' : '📂 Selecionar Arquivo de Backup'}
+              </label>
+            </div>
+
+            {/* Info */}
+            <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#f3f4f6', borderRadius: '0.5rem' }}>
+              <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: 0 }}>
+                💡 <strong>Dica:</strong> Faça backup regularmente para não perder seus dados.
+                O arquivo JSON pode ser aberto em qualquer editor de texto.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

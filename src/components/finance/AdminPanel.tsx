@@ -49,7 +49,8 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
         email: u.email || 'Sem email',
         createdAt: u.created_at || new Date().toISOString(),
         lastLogin: undefined,
-        isAdmin: ADMIN_EMAILS.includes(u.email),
+        // Comparação case-insensitive para verificar se é admin
+        isAdmin: ADMIN_EMAILS.map(e => e.toLowerCase()).includes((u.email || '').toLowerCase()),
         expiresAt: u.expires_at || null
       }));
       
@@ -219,7 +220,9 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
   };
 
   const handleDeleteUser = async (uid: string, email: string) => {
-    if (ADMIN_EMAILS.includes(email)) {
+    // Verificação case-insensitive
+    const isAdminUser = ADMIN_EMAILS.map(e => e.toLowerCase()).includes(email.toLowerCase());
+    if (isAdminUser) {
       showNotification('Não é possível excluir um administrador!', 'error');
       return;
     }
