@@ -224,22 +224,34 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       return;
     }
 
-    if (!confirm(`Tem certeza que deseja excluir o usuário ${email}?`)) return;
+    // Confirmação dupla para segurança
+    const confirm1 = confirm(`⚠️ ATENÇÃO!\n\nTem certeza que deseja excluir o usuário ${email}?\n\nEsta ação irá excluir TODOS os dados deste usuário:\n- Transações\n- Cartões de crédito\n- Categorias\n- Bancos\n- Acesso ao sistema\n\nEsta ação NÃO pode ser desfeita!`);
+    if (!confirm1) return;
+
+    const confirm2 = confirm(`🔴 ÚLTIMA CONFIRMAÇÃO!\n\nDigite "EXCLUIR" para confirmar a exclusão de ${email}.\n\nPressione OK para confirmar.`);
+    if (!confirm2) return;
 
     setLoading(true);
     try {
-      // Deletar dados relacionados (ON DELETE CASCADE deve cuidar disso, mas vamos garantir)
-      await supabase.from('transactions').delete().eq('user_id', uid);
-      await supabase.from('credit_card_transactions').delete().eq('user_id', uid);
-      await supabase.from('credit_cards').delete().eq('user_id', uid);
-      await supabase.from('categories').delete().eq('user_id', uid);
-      await supabase.from('banks').delete().eq('user_id', uid);
-      
-      // Deletar usuário da tabela users
-      const { error } = await supabase.from('users').delete().eq('id', uid);
-      if (error) throw error;
-      
-      showNotification('Usuário excluído com sucesso!', 'success');
+      const response = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid,
+          email,
+          adminEmail: user?.email
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        showNotification(result.error || 'Erro ao excluir usuário', 'error');
+        setLoading(false);
+        return;
+      }
+
+      showNotification(`✅ Usuário ${email} excluído com sucesso!`, 'success');
       loadUsers();
     } catch (error) {
       console.error('Erro ao excluir usuário:', error);
@@ -422,25 +434,26 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        {!u.isAdmin && (
-                          <>
-                            <button 
-                              className="btn btn-sm" 
-                              style={{ background: '#3b82f6', color: 'white' }}
-                              onClick={() => openEditModal(u)}
-                            >
-                              ✏️ Editar
-                            </button>
-                            <button 
-                              className="btn btn-sm btn-danger" 
-                              onClick={() => handleDeleteUser(u.uid, u.email)}
-                            >
-                              🗑️ Excluir
-                            </button>
-                          </>
-                        )}
-                      </div>
+                      {!u.isAdmin ? (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'nowrap' }}>
+                          <button
+                            className="btn btn-sm"
+                            style={{ background: '#3b82f6', color: 'white', whiteSpace: 'nowrap' }}
+                            onClick={() => openEditModal(u)}
+                          >
+                            ✏️ Editar
+                          </button>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            style={{ whiteSpace: 'nowrap' }}
+                            onClick={() => handleDeleteUser(u.uid, u.email)}
+                          >
+                            🗑️ Excluir
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Protegido</span>
+                      )}
                     </td>
                   </tr>
                 );
