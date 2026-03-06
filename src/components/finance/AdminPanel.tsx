@@ -18,6 +18,13 @@ interface EditModalData {
   expiresAt: string;
 }
 
+interface SeedModalData {
+  email: string;
+  startDate: string;
+  endDate: string;
+  transactionCount: number;
+}
+
 export function AdminPanel({ showNotification }: { showNotification: (msg: string, type: 'success' | 'error') => void }) {
   const { user } = useFinance();
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -29,6 +36,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
   const [searchEmail, setSearchEmail] = useState('');
   const [editModal, setEditModal] = useState<EditModalData | null>(null);
   const [editExpiresAt, setEditExpiresAt] = useState('');
+  const [seedModal, setSeedModal] = useState<SeedModalData | null>(null);
 
   const isAdmin = user?.email && ADMIN_EMAILS.map(e => e.toLowerCase()).includes(user.email.toLowerCase());
 
@@ -334,25 +342,38 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
     }
   };
 
-  // Popular dados de demonstração
-  const handleSeedDemo = async (targetEmail: string) => {
-    const confirm = window.confirm(
-      `📊 POPULAR DADOS DE DEMONSTRAÇÃO\n\n` +
-      `Isso irá criar dados fictícios para o usuário:\n` +
-      `${targetEmail}\n\n` +
-      `Incluindo:\n` +
-      `• 8 Bancos\n` +
-      `• 40 Categorias\n` +
-      `• 5 Cartões de Crédito\n` +
-      `• ~130 Transações Bancárias\n` +
-      `• ~110 Transações de Cartão\n\n` +
-      `⚠️ Dados existentes serão APAGADOS!\n\n` +
-      `Deseja continuar?`
-    );
+  // Abrir modal para popular dados de demonstração
+  const openSeedModal = (targetEmail: string) => {
+    // Calcular datas padrão (últimos 6 meses)
+    const endDate = new Date().toISOString().split('T')[0];
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 6);
+    const startDateStr = startDate.toISOString().split('T')[0];
 
-    if (!confirm) return;
+    setSeedModal({
+      email: targetEmail,
+      startDate: startDateStr,
+      endDate: endDate,
+      transactionCount: 200
+    });
+  };
+
+  // Executar popular dados de demonstração
+  const handleSeedDemo = async () => {
+    if (!seedModal) return;
+
+    if (!seedModal.startDate || !seedModal.endDate) {
+      showNotification('Selecione o período!', 'error');
+      return;
+    }
+
+    if (seedModal.transactionCount < 10 || seedModal.transactionCount > 1000) {
+      showNotification('Quantidade deve ser entre 10 e 1000!', 'error');
+      return;
+    }
 
     setLoading(true);
+    setSeedModal(null);
     showNotification('⏳ Criando dados de demonstração...', 'success');
 
     try {
@@ -361,7 +382,10 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           adminEmail: user?.email,
-          targetEmail: targetEmail
+          targetEmail: seedModal.email,
+          startDate: seedModal.startDate,
+          endDate: seedModal.endDate,
+          transactionCount: seedModal.transactionCount
         })
       });
 
@@ -371,7 +395,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
         showNotification(result.error || 'Erro ao criar dados', 'error');
       } else {
         showNotification(
-          `✅ Dados criados!\n` +
+          `✅ Dados criados com sucesso!\n` +
           `Bancos: ${result.summary.banks}\n` +
           `Categorias: ${result.summary.categories}\n` +
           `Cartões: ${result.summary.creditCards}\n` +
@@ -583,7 +607,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
                           <button
                             className="btn btn-sm"
                             style={{ background: '#8b5cf6', color: 'white', whiteSpace: 'nowrap' }}
-                            onClick={() => handleSeedDemo(u.email)}
+                            onClick={() => openSeedModal(u.email)}
                             disabled={loading}
                             title="Popular dados de demonstração"
                           >
@@ -671,6 +695,109 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
                 className="btn" 
                 style={{ background: '#6b7280', color: 'white' }}
                 onClick={() => setEditModal(null)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Seed Demo Modal */}
+      {seedModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '0.5rem',
+            maxWidth: '500px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <h4 style={{ marginBottom: '1rem' }}>📊 Popular Dados de Demonstração</h4>
+            <p style={{ marginBottom: '1rem', color: '#6b7280' }}>
+              <strong>Usuário:</strong> {seedModal.email}
+            </p>
+
+            <div style={{ padding: '1rem', background: '#fef3c7', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>
+              <p style={{ margin: 0, fontSize: '0.9rem', color: '#92400e' }}>
+                ⚠️ <strong>Atenção:</strong> Todos os dados existentes deste usuário serão apagados e substituídos pelos dados de demonstração.
+              </p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">Data Inicial *</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={seedModal.startDate}
+                  onChange={e => setSeedModal({ ...seedModal, startDate: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Data Final *</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={seedModal.endDate}
+                  onChange={e => setSeedModal({ ...seedModal, endDate: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Quantidade de Lançamentos *</label>
+              <input
+                type="number"
+                className="form-input"
+                min="10"
+                max="1000"
+                value={seedModal.transactionCount}
+                onChange={e => setSeedModal({ ...seedModal, transactionCount: parseInt(e.target.value) || 200 })}
+              />
+              <small style={{ color: '#6b7280' }}>
+                Mínimo: 10 | Máximo: 1000
+              </small>
+            </div>
+
+            <div style={{ padding: '1rem', background: '#f0f9ff', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>
+              <h5 style={{ margin: '0 0 0.5rem 0', color: '#0369a1' }}>📦 O que será criado:</h5>
+              <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.9rem', color: '#0c4a6e' }}>
+                <li><strong>8 Bancos</strong> com saldos iniciais</li>
+                <li><strong>40 Categorias</strong> (receitas e despesas)</li>
+                <li><strong>5 Cartões de Crédito</strong></li>
+                <li><strong>{seedModal.transactionCount} transações</strong> distribuídas no período</li>
+                <li>Lançamentos variados: salário, mercado, alimentação, transporte, lazer, etc.</li>
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button
+                className="btn btn-primary"
+                style={{ background: '#8b5cf6' }}
+                onClick={handleSeedDemo}
+                disabled={loading}
+              >
+                {loading ? '⏳ Criando...' : '✅ Criar Dados'}
+              </button>
+              <button
+                className="btn"
+                style={{ background: '#6b7280', color: 'white' }}
+                onClick={() => setSeedModal(null)}
+                disabled={loading}
               >
                 Cancelar
               </button>

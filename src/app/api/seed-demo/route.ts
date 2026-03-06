@@ -81,6 +81,8 @@ const INCOME_DESCRIPTIONS = [
   'Comissao Vendas',
   'Decimo Terceiro',
   'Ferias Proporcionais',
+  'Rendimento Tesouro',
+  'Juros Aplicacao',
 ];
 
 const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
@@ -90,16 +92,19 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Pizza Hut',
     'McDonalds',
     'Habibs',
-    'Bob\'s',
+    'Bobs',
     'Spoleto',
     'Giraffas',
     'Subway',
     'China in Box',
-    'Japones',
+    'Restaurante Japones',
     'Churrascaria',
     'Padaria Central',
     'Cafe da Manha',
     'Almoco Trabalho',
+    'Lanche Tarde',
+    'iFood',
+    'Rappi',
   ],
   'MERCADO': [
     'Carrefour',
@@ -112,7 +117,9 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Mercado Livre',
     'Compras Mes',
     'Hortifruti',
-    'Açougue',
+    'Acougue',
+    'Supermercado',
+    'Compras Semanais',
   ],
   'TRANSPORTE': [
     'Posto Shell',
@@ -125,19 +132,23 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Revisao Carro',
     'IPVA',
     'Licenciamento',
+    'Pneus',
+    'Alinhamento',
   ],
   'UBER/99': [
     'Uber Casa-Trabalho',
     '99 Pop',
-    'Uber BhShop',
+    'Uber Shopping',
     'Uber Noite',
     'Cabify',
+    'Uber Aeroporto',
   ],
   'MORADIA': [
     'Aluguel Apartamento',
     'Condominio',
     'IPTU',
     'Manutencao Predio',
+    'Reforma',
   ],
   'ENERGIA': [
     'Conta Luz',
@@ -145,6 +156,7 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Cemig',
     'Light',
     'Enel',
+    'Conta Energia',
   ],
   'AGUA': [
     'Conta Agua',
@@ -157,6 +169,7 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Claro Net',
     'Oi Fibra',
     'Internet Mensal',
+    'Netflix',
   ],
   'TELEFONE': [
     'Claro Celular',
@@ -172,17 +185,20 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'HBO Max',
     'Globoplay',
     'YouTube Premium',
+    'Paramount+',
   ],
   'SPOTIFY': [
     'Spotify Premium',
     'Apple Music',
     'Deezer',
+    'YouTube Music',
   ],
   'ACADEMIA': [
     'Mensalidade Academia',
     'Smart Fit',
     'Body Tech',
     'Fitness',
+    'Personal Trainer',
   ],
   'SAUDE': [
     'Plano de Saude',
@@ -190,7 +206,9 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Amil',
     'Bradesco Saude',
     'Consulta Medica',
-    'Exames',
+    'Exames Laboratoriais',
+    'Dentista',
+    'Oftalmologista',
   ],
   'FARMACIA': [
     'Drogasil',
@@ -199,11 +217,14 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Raia',
     'Sao Joao',
     'Medicamentos',
+    'Vitaminas',
   ],
   'EDUCACAO': [
     'Mensalidade Faculdade',
     'Material Escolar',
     'Livros Didaticos',
+    'Escola Filhos',
+    'Uniforme',
   ],
   'CURSOS': [
     'Udemy',
@@ -212,6 +233,7 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Curso Ingles',
     'Pos Graduacao',
     'MBA',
+    'Certificacao',
   ],
   'LAZER': [
     'Cinema',
@@ -220,6 +242,8 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Parque',
     'Bowling',
     'Kart',
+    'Bar',
+    'Balada',
   ],
   'ROUPAS': [
     'Renner',
@@ -229,6 +253,7 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Zara',
     'H&M',
     'Calcadatos',
+    'Loja Roupas',
   ],
   'PRESENTES': [
     'Presente Aniversario',
@@ -236,12 +261,15 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Presente Mae',
     'Presente Pai',
     'Presente Natal',
+    'Presente Criancas',
   ],
   'PET SHOP': [
     'Racao Pet',
     'Petshop',
     'Veterinario',
     'Banho Pet',
+    'Tosa',
+    'Brinquedos Pet',
   ],
   'VIAGEM': [
     'Passagem Aerea',
@@ -250,6 +278,7 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Resort',
     'Aluguel Carro',
     'Passeio Turistico',
+    'Pacote Viagem',
   ],
   'COSMETICOS': [
     'Boticario',
@@ -257,22 +286,73 @@ const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
     'Mac',
     'Sephora',
     'Perfumaria',
+    'Maquiagem',
   ],
   'CABELEREIRO': [
     'Corte Cabelo',
     'Barbearia',
     'Salao Beleza',
     'Manicure',
+    'Pedicure',
+    'Coloracao',
+  ],
+  'GASOLINA': [
+    'Posto Shell',
+    'Posto Ipiranga',
+    'Posto Petrobras',
+    'Combustivel',
+    'Etanol',
+    'Gasolina Aditivada',
+  ],
+  'MANUTENCAO CARRO': [
+    'Oficina',
+    'Troca Oleo',
+    'Revisao',
+    'Freios',
+    'Suspensao',
+    'Ar Condicionado',
+  ],
+  'CINEMA': [
+    'Cinemark',
+    'Kinoplex',
+    'Ingresso Cinema',
+    'Pipoca',
+    'Combo Cinema',
+  ],
+  'LIVROS': [
+    'Livraria Cultura',
+    'Saraiva',
+    'Livros Amazon',
+    'Kindle',
+    'Livro Fisico',
+  ],
+  'IMPOSTOS': [
+    'IRPF',
+    'IPTU',
+    'IPVA',
+    'Taxas Municipais',
+    'Contribuicao',
+  ],
+  'SEGURO': [
+    'Seguro Auto',
+    'Seguro Vida',
+    'Seguro Residencia',
+    'Seguro Saude',
+  ],
+  'EMPRESTIMO': [
+    'Parcela Emprestimo',
+    'Financiamento',
+    'Consorcio',
+    'Credito Pessoal',
   ],
 };
 
-// Função para gerar data aleatória nos últimos 12 meses
-function randomDate(monthsAgo: number = 12): string {
-  const now = new Date();
-  const past = new Date();
-  past.setMonth(past.getMonth() - monthsAgo);
+// Função para gerar data aleatória dentro de um período
+function randomDateInRange(startDate: string, endDate: string): string {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
 
-  const randomTime = past.getTime() + Math.random() * (now.getTime() - past.getTime());
+  const randomTime = start.getTime() + Math.random() * (end.getTime() - start.getTime());
   const randomDate = new Date(randomTime);
 
   return randomDate.toISOString().split('T')[0];
@@ -305,13 +385,20 @@ export async function POST(request: NextRequest) {
       auth: { autoRefreshToken: false, persistSession: false }
     });
 
-    const { adminEmail, targetEmail } = await request.json();
+    const { adminEmail, targetEmail, startDate, endDate, transactionCount } = await request.json();
 
     // Verificar se é admin (case-insensitive)
     const adminEmailsLower = ADMIN_EMAILS.map(e => e.toLowerCase());
     if (!adminEmailsLower.includes((adminEmail || '').toLowerCase())) {
       return NextResponse.json({ error: 'Não autorizado.' }, { status: 403 });
     }
+
+    // Validar parâmetros
+    const count = Math.min(Math.max(transactionCount || 200, 10), 1000);
+    const start = startDate || new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const end = endDate || new Date().toISOString().split('T')[0];
+
+    console.log(`[SEED-DEMO] Período: ${start} a ${end}, Quantidade: ${count}`);
 
     // Buscar usuário alvo
     const { data: users, error: userError } = await supabaseAdmin.auth.admin.listUsers();
@@ -406,40 +493,45 @@ export async function POST(request: NextRequest) {
 
     console.log(`[SEED-DEMO] ${Object.keys(cardsMap).length} cartões criados`);
 
-    // 4. Criar Transações (200+)
-    console.log('[SEED-DEMO] Criando transações...');
-    let transactionsCreated = 0;
-    let ccTransactionsCreated = 0;
+    // 4. Criar Transações
+    console.log(`[SEED-DEMO] Criando ${count} transações...`);
+    let bankTransactions = 0;
+    let ccTransactions = 0;
 
     const bankIds = Object.values(banksMap);
     const cardIds = Object.values(cardsMap);
-    const cardNames = Object.keys(cardsMap);
-
-    // Criar transações de receita (aproximadamente 20-30 transações)
+    const expenseCategories = Object.keys(EXPENSE_DESCRIPTIONS);
     const incomeCategories = ['SALARIO', 'FREELA', 'INVESTIMENTOS'];
-    const incomeBanks = ['BANCO DO BRASIL', 'NUBANK', 'ITAU'];
+    const mainBanks = ['BANCO DO BRASIL', 'NUBANK', 'ITAU'];
 
-    for (let i = 0; i < 30; i++) {
+    // Calcular quantas transações de cada tipo
+    // Aproximadamente 15% de receitas, 55% despesas banco, 30% cartão
+    const incomeCount = Math.floor(count * 0.15);
+    const bankExpenseCount = Math.floor(count * 0.55);
+    const cardExpenseCount = count - incomeCount - bankExpenseCount;
+
+    // Criar transações de receita (salários, freelas, etc.)
+    for (let i = 0; i < incomeCount; i++) {
       const category = randomItem(incomeCategories);
-      const bankName = randomItem(incomeBanks);
+      const bankName = randomItem(mainBanks);
       const bankId = banksMap[bankName];
 
       if (!bankId || !categoriesMap[category]) continue;
 
       let value: number;
       if (category === 'SALARIO') {
-        value = randomValue(5500, 8500);
+        value = randomValue(5500, 9500);
       } else if (category === 'FREELA') {
-        value = randomValue(500, 3000);
+        value = randomValue(500, 3500);
       } else {
-        value = randomValue(50, 500);
+        value = randomValue(50, 800);
       }
 
       const { error } = await supabaseAdmin
         .from('transactions')
         .insert({
           user_id: targetUser.id,
-          date: randomDate(12),
+          date: randomDateInRange(start, end),
           description: randomItem(INCOME_DESCRIPTIONS),
           bank: bankId,
           type: 'credit',
@@ -447,13 +539,11 @@ export async function POST(request: NextRequest) {
           value: value
         });
 
-      if (!error) transactionsCreated++;
+      if (!error) bankTransactions++;
     }
 
-    // Criar transações de despesa em banco (aproximadamente 100 transações)
-    const expenseCategories = Object.keys(EXPENSE_DESCRIPTIONS);
-
-    for (let i = 0; i < 100; i++) {
+    // Criar transações de despesa em banco
+    for (let i = 0; i < bankExpenseCount; i++) {
       const category = randomItem(expenseCategories);
       const bankId = randomItem(bankIds);
 
@@ -464,44 +554,50 @@ export async function POST(request: NextRequest) {
 
       // Definir ranges de valor por categoria
       if (['ALUGUEL', 'MORADIA'].includes(category)) {
-        value = randomValue(1200, 2500);
-      } else if (['SAUDE', 'PLANO DE SAUDE'].includes(category)) {
-        value = randomValue(300, 800);
+        value = randomValue(1200, 2800);
+      } else if (['SAUDE'].includes(category)) {
+        value = randomValue(250, 900);
       } else if (['ENERGIA', 'AGUA'].includes(category)) {
-        value = randomValue(80, 300);
+        value = randomValue(80, 350);
       } else if (['INTERNET', 'TELEFONE'].includes(category)) {
-        value = randomValue(80, 200);
+        value = randomValue(80, 220);
       } else if (['STREAMING', 'SPOTIFY', 'NETFLIX'].includes(category)) {
-        value = randomValue(20, 60);
+        value = randomValue(25, 70);
       } else if (['ACADEMIA'].includes(category)) {
-        value = randomValue(80, 150);
+        value = randomValue(80, 180);
       } else if (['MERCADO'].includes(category)) {
-        value = randomValue(150, 600);
+        value = randomValue(150, 700);
       } else if (['ALIMENTACAO', 'RESTAURANTE'].includes(category)) {
-        value = randomValue(30, 150);
+        value = randomValue(35, 180);
       } else if (['TRANSPORTE', 'GASOLINA'].includes(category)) {
-        value = randomValue(50, 300);
+        value = randomValue(60, 350);
       } else if (['UBER/99'].includes(category)) {
-        value = randomValue(15, 80);
+        value = randomValue(18, 90);
       } else if (['EDUCACAO', 'CURSOS'].includes(category)) {
-        value = randomValue(50, 500);
+        value = randomValue(80, 600);
       } else if (['LAZER', 'CINEMA'].includes(category)) {
-        value = randomValue(30, 150);
+        value = randomValue(40, 180);
       } else if (['ROUPAS'].includes(category)) {
-        value = randomValue(80, 500);
+        value = randomValue(80, 550);
       } else if (['VIAGEM', 'HOTEL'].includes(category)) {
-        value = randomValue(200, 2000);
+        value = randomValue(250, 2500);
       } else if (['PET SHOP'].includes(category)) {
-        value = randomValue(50, 200);
+        value = randomValue(50, 250);
+      } else if (['IMPOSTOS'].includes(category)) {
+        value = randomValue(100, 500);
+      } else if (['SEGURO'].includes(category)) {
+        value = randomValue(150, 400);
+      } else if (['EMPRESTIMO'].includes(category)) {
+        value = randomValue(300, 800);
       } else {
-        value = randomValue(20, 200);
+        value = randomValue(25, 220);
       }
 
       const { error } = await supabaseAdmin
         .from('transactions')
         .insert({
           user_id: targetUser.id,
-          date: randomDate(12),
+          date: randomDateInRange(start, end),
           description: randomItem(descriptions),
           bank: bankId,
           type: 'debit',
@@ -509,11 +605,11 @@ export async function POST(request: NextRequest) {
           value: value
         });
 
-      if (!error) transactionsCreated++;
+      if (!error) bankTransactions++;
     }
 
-    // Criar transações de cartão de crédito (aproximadamente 100 transações)
-    for (let i = 0; i < 100; i++) {
+    // Criar transações de cartão de crédito
+    for (let i = 0; i < cardExpenseCount; i++) {
       const category = randomItem(expenseCategories);
       const cardId = randomItem(cardIds);
 
@@ -522,32 +618,34 @@ export async function POST(request: NextRequest) {
       const descriptions = EXPENSE_DESCRIPTIONS[category] || [category];
       let value: number;
 
-      // Cartão geralmente tem gastos menores, mas mais frequentes
+      // Cartão geralmente tem gastos menores
       if (['ALIMENTACAO', 'RESTAURANTE'].includes(category)) {
-        value = randomValue(25, 120);
+        value = randomValue(30, 150);
       } else if (['MERCADO'].includes(category)) {
-        value = randomValue(50, 300);
+        value = randomValue(60, 350);
       } else if (['STREAMING', 'SPOTIFY', 'NETFLIX'].includes(category)) {
-        value = randomValue(25, 55);
+        value = randomValue(30, 60);
       } else if (['ROUPAS'].includes(category)) {
-        value = randomValue(80, 400);
+        value = randomValue(100, 500);
       } else if (['LAZER', 'CINEMA'].includes(category)) {
-        value = randomValue(40, 120);
+        value = randomValue(50, 150);
       } else if (['COSMETICOS', 'CABELEREIRO'].includes(category)) {
-        value = randomValue(50, 250);
+        value = randomValue(60, 300);
       } else if (['UBER/99'].includes(category)) {
-        value = randomValue(15, 60);
-      } else if (['APRESENTES'].includes(category)) {
-        value = randomValue(50, 300);
+        value = randomValue(20, 70);
+      } else if (['PRESENTES'].includes(category)) {
+        value = randomValue(60, 350);
+      } else if (['VIAGEM'].includes(category)) {
+        value = randomValue(200, 800);
       } else {
-        value = randomValue(20, 150);
+        value = randomValue(30, 180);
       }
 
       const { error } = await supabaseAdmin
         .from('credit_card_transactions')
         .insert({
           user_id: targetUser.id,
-          date: randomDate(6), // Últimos 6 meses para cartão
+          date: randomDateInRange(start, end),
           description: randomItem(descriptions),
           card: cardId,
           category: categoriesMap[category],
@@ -555,27 +653,30 @@ export async function POST(request: NextRequest) {
           is_payment: false
         });
 
-      if (!error) ccTransactionsCreated++;
+      if (!error) ccTransactions++;
     }
 
     // Adicionar alguns pagamentos de fatura
-    for (let i = 0; i < 8; i++) {
+    const paymentCount = Math.floor(count / 25);
+    for (let i = 0; i < paymentCount; i++) {
       const bankId = randomItem(bankIds);
       const cardId = randomItem(cardIds);
 
       if (!bankId || !cardId) continue;
+
+      const paymentValue = randomValue(500, 2000);
 
       // Pagamento de fatura (débito no banco)
       await supabaseAdmin
         .from('transactions')
         .insert({
           user_id: targetUser.id,
-          date: randomDate(6),
+          date: randomDateInRange(start, end),
           description: 'Pagamento Fatura Cartao',
           bank: bankId,
           type: 'debit',
           category: categoriesMap['PAGAMENTO CARTAO'],
-          value: randomValue(800, 2500)
+          value: paymentValue
         });
 
       // Pagamento de fatura (crédito no cartão)
@@ -583,20 +684,20 @@ export async function POST(request: NextRequest) {
         .from('credit_card_transactions')
         .insert({
           user_id: targetUser.id,
-          date: randomDate(6),
+          date: randomDateInRange(start, end),
           description: 'Pagamento Fatura',
           card: cardId,
           category: categoriesMap['PAGAMENTO CARTAO'],
-          value: -randomValue(800, 2500),
+          value: -paymentValue,
           is_payment: true
         });
 
-      transactionsCreated++;
-      ccTransactionsCreated++;
+      bankTransactions++;
+      ccTransactions++;
     }
 
-    console.log(`[SEED-DEMO] ${transactionsCreated} transações bancárias criadas`);
-    console.log(`[SEED-DEMO] ${ccTransactionsCreated} transações de cartão criadas`);
+    console.log(`[SEED-DEMO] ${bankTransactions} transações bancárias criadas`);
+    console.log(`[SEED-DEMO] ${ccTransactions} transações de cartão criadas`);
 
     return NextResponse.json({
       success: true,
@@ -605,9 +706,10 @@ export async function POST(request: NextRequest) {
         banks: Object.keys(banksMap).length,
         categories: Object.keys(categoriesMap).length,
         creditCards: Object.keys(cardsMap).length,
-        bankTransactions: transactionsCreated,
-        creditCardTransactions: ccTransactionsCreated,
-        totalRecords: Object.keys(banksMap).length + Object.keys(categoriesMap).length + Object.keys(cardsMap).length + transactionsCreated + ccTransactionsCreated
+        bankTransactions: bankTransactions,
+        creditCardTransactions: ccTransactions,
+        totalRecords: Object.keys(banksMap).length + Object.keys(categoriesMap).length + Object.keys(cardsMap).length + bankTransactions + ccTransactions,
+        period: { start, end }
       }
     });
 
