@@ -138,7 +138,12 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
         return;
       }
 
-      showNotification(`Usuário ${newUserEmail} criado com sucesso!`, 'success');
+      // Se requer registro do usuário, mostrar instrução
+      if (result.requiresRegistration) {
+        showNotification(`✉️ Convite criado! O usuário deve se registrar com email: ${newUserEmail} e a senha fornecida.`, 'success');
+      } else {
+        showNotification(`Usuário ${newUserEmail} criado com sucesso!`, 'success');
+      }
       setNewUserEmail('');
       setNewUserPassword('');
       setNewUserExpiresAt('');
