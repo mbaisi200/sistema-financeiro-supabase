@@ -41,9 +41,13 @@ export function Dashboard() {
   });
 
   // Encontrar ID da categoria PAGAMENTO CARTÃO
-  const pagamentoCartaoCategoryIds = categories
-    .filter(c => c.name.toUpperCase() === 'PAGAMENTO CARTÃO')
-    .map(c => c.id);
+  // Inclui tanto o UUID da categoria quanto a string fixa usada no payCardInvoice
+  const pagamentoCartaoCategoryIds = [
+    ...categories
+      .filter(c => c.name.toUpperCase() === 'PAGAMENTO CARTÃO')
+      .map(c => c.id),
+    'pagamento_cartao'  // String fixa usada em payCardInvoice
+  ];
 
   const income = monthTx.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0);
   const expenses = monthTx.filter(t => t.type === 'debit' && !pagamentoCartaoCategoryIds.includes(t.category)).reduce((s, t) => s + t.value, 0);
