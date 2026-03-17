@@ -9,6 +9,7 @@ export interface ScheduledTransaction {
   id: string;
   description: string;
   type: 'parcel' | 'recurring' | 'single';
+  transactionType: 'debit' | 'credit'; // débito (despesa) ou crédito (receita)
   value: number;
   totalInstallments: number;
   currentInstallment: number;

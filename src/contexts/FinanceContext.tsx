@@ -229,6 +229,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           id: t.id,
           description: t.description,
           type: t.type,
+          transactionType: t.transaction_type || 'debit',
           value: parseFloat(t.value),
           totalInstallments: t.total_installments,
           currentInstallment: t.current_installment,
@@ -777,6 +778,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         user_id: user.id,
         description: transaction.description.toUpperCase(),
         type: transaction.type,
+        transaction_type: transaction.transactionType || 'debit',
         value: transaction.value,
         total_installments: transaction.totalInstallments,
         current_installment: transaction.currentInstallment,
@@ -802,6 +804,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         id: data.id,
         description: data.description,
         type: data.type,
+        transactionType: data.transaction_type || 'debit',
         value: parseFloat(data.value),
         totalInstallments: data.total_installments,
         currentInstallment: data.current_installment,
@@ -868,6 +871,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     
     const value = confirmedValue || scheduledTx.value;
     const date = confirmedDate || new Date().toISOString().split('T')[0];
+    const transactionType = scheduledTx.transactionType || 'debit'; // padrão é débito
     
     // Criar transação real
     if (useCreditCard && scheduledTx.card) {
@@ -903,7 +907,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           date: date,
           description: scheduledTx.description,
           bank: scheduledTx.bank,
-          type: 'debit',
+          type: transactionType, // usa o tipo do lançamento (credit ou debit)
           category: scheduledTx.category || '',
           value: value
         });
@@ -916,7 +920,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         date: date,
         description: scheduledTx.description,
         bank: scheduledTx.bank,
-        type: 'debit',
+        type: transactionType,
         category: scheduledTx.category || '',
         value: value
       }, ...prev]);

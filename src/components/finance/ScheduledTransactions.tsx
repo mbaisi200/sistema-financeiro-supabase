@@ -27,6 +27,7 @@ export function ScheduledTransactions({ showNotification }: { showNotification: 
   const [form, setForm] = useState({
     description: '',
     type: 'single' as 'parcel' | 'recurring' | 'single',
+    transactionType: 'debit' as 'debit' | 'credit',
     value: '',
     totalInstallments: '1',
     dueDate: new Date().toISOString().split('T')[0],
@@ -83,17 +84,29 @@ export function ScheduledTransactions({ showNotification }: { showNotification: 
     return acc;
   }, {} as Record<string, { name: string; items: ScheduledTransaction[] }>);
 
-  // Estatísticas
-  const todayTotal = scheduledTransactions.filter(s => s.status === 'pending' && s.dueDate === today).reduce((sum, s) => sum + s.value, 0);
-  const overdueTotal = scheduledTransactions.filter(s => s.status === 'pending' && s.dueDate < today).reduce((sum, s) => sum + s.value, 0);
-  const thisMonthTotal = scheduledTransactions.filter(s => {
-    if (s.status !== 'pending') return false;
+  // Estatísticas separadas por tipo
+  const todayExpenses = scheduledTransactions.filter(s => s.status === 'pending' && s.dueDate === today && s.transactionType !== 'credit').reduce((sum, s) => sum + s.value, 0);
+  const todayIncome = scheduledTransactions.filter(s => s.status === 'pending' && s.dueDate === today && s.transactionType === 'credit').reduce((sum, s) => sum + s.value, 0);
+  const overdueTotal = scheduledTransactions.filter(s => s.status === 'pending' && s.dueDate < today && s.transactionType !== 'credit').reduce((sum, s) => sum + s.value, 0);
+  const thisMonthExpenses = scheduledTransactions.filter(s => {
+    if (s.status !== 'pending' || s.transactionType === 'credit') return false;
     const monthStart = new Date();
     monthStart.setDate(1);
     const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
     const dueDate = new Date(s.dueDate);
     return dueDate >= monthStart && dueDate <= monthEnd;
   }).reduce((sum, s) => sum + s.value, 0);
+  const thisMonthIncome = scheduledTransactions.filter(s => {
+    if (s.status !== 'pending' || s.transactionType !== 'credit') return false;
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    const dueDate = new Date(s.dueDate);
+    return dueDate >= monthStart && dueDate <= monthEnd;
+  }).reduce((sum, s) => sum + s.value, 0);
+
+  // Filtrar por tipo de transação (receita/despesa)
+  const [filterTransactionType, setFilterTransactionType] = useState<'all' | 'income' | 'expense'>('all');
 
   const handleAdd = async () => {
     if (!form.description || !form.value || !form.dueDate) {
@@ -123,6 +136,7 @@ export function ScheduledTransactions({ showNotification }: { showNotification: 
         await addScheduledTransaction({
           description: toUpperCase(form.description) + (totalInstallments > 1 ? ` (${i + 1}/${totalInstallments})` : ''),
           type: form.type,
+          transactionType: form.transactionType,
           value: parseFloat(form.value),
           totalInstallments: totalInstallments,
           currentInstallment: i + 1,
@@ -140,6 +154,7 @@ export function ScheduledTransactions({ showNotification }: { showNotification: 
       setForm({
         description: '',
         type: 'single',
+        transactionType: 'debit',
         value: '',
         totalInstallments: '1',
         dueDate: new Date().toISOString().split('T')[0],
@@ -219,6 +234,13 @@ export function ScheduledTransactions({ showNotification }: { showNotification: 
     }
   };
 
+  const getTransactionTypeBadge = (transactionType: string) => {
+    if (transactionType === 'credit') {
+      return <span className="badge" style={{ background: '#22c55e', color: 'white' }}>💰 Receita</span>;
+    }
+    return <span className="badge" style={{ background: '#ef4444', color: 'white' }}>💸 Despesa</span>;
+  };
+
   const getStatusBadge = (dueDate: string) => {
     if (dueDate === today) {
       return <span className="badge" style={{ background: '#ef4444', color: 'white' }}>🔴 Hoje</span>;
@@ -281,8 +303,15 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
         <div className="stat-card red" style={{ cursor: 'pointer' }} onClick={() => setFilterStatus('today')}>
           <div className="stat-icon">🔴</div>
           <div className="stat-content">
-            <div className="stat-value">{fmt(todayTotal)}</div>
-            <div className="stat-label">VENCENDO HOJE</div>
+            <div className="stat-value">{fmt(todayExpenses)}</div>
+            <div className="stat-label">DESPESAS HOJE</div>
+          </div>
+        </div>
+        <div className="stat-card green" style={{ cursor: 'pointer' }} onClick={() => setFilterStatus('today')}>
+          <div className="stat-icon">💰</div>
+          <div className="stat-content">
+            <div className="stat-value">{fmt(todayIncome)}</div>
+            <div className="stat-label">RECEITAS HOJE</div>
           </div>
         </div>
         <div className="stat-card orange" style={{ cursor: 'pointer' }} onClick={() => setFilterStatus('overdue')}>
@@ -295,8 +324,8 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
         <div className="stat-card blue" style={{ cursor: 'pointer' }} onClick={() => setFilterStatus('upcoming')}>
           <div className="stat-icon">📅</div>
           <div className="stat-content">
-            <div className="stat-value">{fmt(thisMonthTotal)}</div>
-            <div className="stat-label">ESTE MÊS</div>
+            <div className="stat-value">{fmt(thisMonthExpenses)}</div>
+            <div className="stat-label">DESP. ESTE MÊS</div>
           </div>
         </div>
         <div className="stat-card purple" style={{ cursor: 'pointer' }} onClick={() => setFilterStatus('all')}>
@@ -324,6 +353,21 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
             />
           </div>
           <div className="form-group">
+            <label className="form-label">Natureza *</label>
+            <select
+              className="form-select"
+              value={form.transactionType}
+              onChange={e => setForm({ ...form, transactionType: e.target.value as any })}
+              style={{ 
+                background: form.transactionType === 'credit' ? '#f0fdf4' : '#fef2f2',
+                borderColor: form.transactionType === 'credit' ? '#22c55e' : '#ef4444'
+              }}
+            >
+              <option value="debit">💸 Despesa (Saída)</option>
+              <option value="credit">💰 Receita (Entrada)</option>
+            </select>
+          </div>
+          <div className="form-group">
             <label className="form-label">Tipo</label>
             <select
               className="form-select"
@@ -344,6 +388,10 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
               placeholder="0,00"
               value={form.value}
               onChange={e => setForm({ ...form, value: e.target.value })}
+              style={{ 
+                color: form.transactionType === 'credit' ? '#22c55e' : '#ef4444',
+                fontWeight: 600
+              }}
             />
           </div>
           {form.type === 'parcel' && (
@@ -497,6 +545,7 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
                       <th>Status</th>
                       <th>Data</th>
                       <th>Descrição</th>
+                      <th>Natureza</th>
                       <th>Tipo</th>
                       <th>Banco/Cartão</th>
                       <th>Categoria</th>
@@ -519,6 +568,7 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
                             </small>
                           )}
                         </td>
+                        <td>{getTransactionTypeBadge(s.transactionType || 'debit')}</td>
                         <td>{getTypeBadge(s.type)}</td>
                         <td>
                           {s.card ? (
@@ -532,8 +582,12 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
                             <span className="badge category">{getCategoryIcon(s.category)} {getCategoryName(s.category)}</span>
                           ) : '-'}
                         </td>
-                        <td style={{ textAlign: 'right', fontWeight: 600, color: '#ef4444' }}>
-                          {fmt(s.value)}
+                        <td style={{ 
+                          textAlign: 'right', 
+                          fontWeight: 600, 
+                          color: s.transactionType === 'credit' ? '#22c55e' : '#ef4444'
+                        }}>
+                          {s.transactionType === 'credit' ? '+' : '-'}{fmt(s.value)}
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '0.25rem' }}>
