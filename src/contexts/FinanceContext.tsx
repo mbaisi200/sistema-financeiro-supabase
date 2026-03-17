@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { Bank, Category, CreditCard, Transaction, CreditCardTransaction, DEFAULT_BANKS, DEFAULT_CATEGORIES, ADMIN_EMAILS } from '@/lib/types';
+import { Bank, Category, CreditCard, Transaction, CreditCardTransaction, ScheduledTransaction, DEFAULT_BANKS, DEFAULT_CATEGORIES, ADMIN_EMAILS } from '@/lib/types';
 
 interface FinanceContextType {
   user: User | null;
@@ -16,6 +16,8 @@ interface FinanceContextType {
   creditCards: CreditCard[];
   transactions: Transaction[];
   creditCardTransactions: CreditCardTransaction[];
+  scheduledTransactions: ScheduledTransaction[];
+  scheduledTransactionsTableExists: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -39,6 +41,11 @@ interface FinanceContextType {
   updateCreditCardTransaction: (id: string, transaction: Partial<CreditCardTransaction>) => Promise<void>;
   deleteCreditCardTransaction: (id: string) => Promise<void>;
   payCardInvoice: (cardId: string, bankId: string, value: number, date: string) => Promise<void>;
+  loadScheduledTransactions: () => Promise<void>;
+  addScheduledTransaction: (transaction: Omit<ScheduledTransaction, 'id'>) => Promise<ScheduledTransaction | null>;
+  updateScheduledTransaction: (id: string, transaction: Partial<ScheduledTransaction>) => Promise<void>;
+  deleteScheduledTransaction: (id: string) => Promise<void>;
+  confirmScheduledTransaction: (id: string, confirmedValue?: number, confirmedDate?: string, useCreditCard?: boolean) => Promise<void>;
   getCategoryName: (id: string) => string;
   getCategoryIcon: (id: string) => string;
   getBankName: (id: string) => string;
@@ -62,6 +69,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [creditCardTransactions, setCreditCardTransactions] = useState<CreditCardTransaction[]>([]);
+  const [scheduledTransactions, setScheduledTransactions] = useState<ScheduledTransaction[]>([]);
+  const [scheduledTransactionsTableExists, setScheduledTransactionsTableExists] = useState<boolean>(true);
   
   // Refs para evitar loops
   const initializingRef = useRef(false);
@@ -199,6 +208,39 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           isPayment: t.is_payment
         })));
       }
+
+      // Carregar lançamentos futuros
+      const { data: scheduledData, error: scheduledError } = await supabase
+        .from('scheduled_transactions')
+        .select('*')
+        .eq('user_id', uid)
+        .order('due_date', { ascending: true });
+      
+      if (scheduledError) {
+        if (scheduledError.message.includes('does not exist') || scheduledError.message.includes('relation')) {
+          setScheduledTransactionsTableExists(false);
+          setScheduledTransactions([]);
+        } else {
+          console.error('Erro ao carregar lançamentos futuros:', scheduledError);
+        }
+      } else if (scheduledData) {
+        setScheduledTransactionsTableExists(true);
+        setScheduledTransactions(scheduledData.map(t => ({
+          id: t.id,
+          description: t.description,
+          type: t.type,
+          value: parseFloat(t.value),
+          totalInstallments: t.total_installments,
+          currentInstallment: t.current_installment,
+          dueDate: t.due_date,
+          category: t.category || '',
+          bank: t.bank || '',
+          card: t.card || '',
+          isPaid: t.is_paid,
+          autoConfirm: t.auto_confirm,
+          status: t.status
+        })));
+      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
@@ -334,6 +376,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
         setCreditCards([]);
         setTransactions([]);
         setCreditCardTransactions([]);
+        setScheduledTransactions([]);
+        setScheduledTransactionsTableExists(true);
       }
       
       setLoading(false);
@@ -687,6 +731,228 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     await loadUserData(user.id);
   };
 
+  // Scheduled Transactions functions
+  const loadScheduledTransactions = async () => {
+    if (!user) return;
+    
+    const { data, error } = await supabase
+      .from('scheduled_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('due_date', { ascending: true });
+    
+    if (error) {
+      if (error.message.includes('does not exist') || error.message.includes('relation')) {
+        setScheduledTransactionsTableExists(false);
+        setScheduledTransactions([]);
+      } else {
+        console.error('Erro ao carregar lançamentos futuros:', error);
+      }
+    } else if (data) {
+      setScheduledTransactionsTableExists(true);
+      setScheduledTransactions(data.map(t => ({
+        id: t.id,
+        description: t.description,
+        type: t.type,
+        value: parseFloat(t.value),
+        totalInstallments: t.total_installments,
+        currentInstallment: t.current_installment,
+        dueDate: t.due_date,
+        category: t.category || '',
+        bank: t.bank || '',
+        card: t.card || '',
+        isPaid: t.is_paid,
+        autoConfirm: t.auto_confirm,
+        status: t.status
+      })));
+    }
+  };
+
+  const addScheduledTransaction = async (transaction: Omit<ScheduledTransaction, 'id'>): Promise<ScheduledTransaction | null> => {
+    if (!user) return null;
+    
+    const { data, error } = await supabase
+      .from('scheduled_transactions')
+      .insert({
+        user_id: user.id,
+        description: transaction.description.toUpperCase(),
+        type: transaction.type,
+        value: transaction.value,
+        total_installments: transaction.totalInstallments,
+        current_installment: transaction.currentInstallment,
+        due_date: transaction.dueDate,
+        category: transaction.category || null,
+        bank: transaction.bank || null,
+        card: transaction.card || null,
+        auto_confirm: transaction.autoConfirm,
+        status: 'pending'
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      if (error.message.includes('does not exist') || error.message.includes('relation')) {
+        setScheduledTransactionsTableExists(false);
+      }
+      throw error;
+    }
+    
+    if (data) {
+      const newTx: ScheduledTransaction = {
+        id: data.id,
+        description: data.description,
+        type: data.type,
+        value: parseFloat(data.value),
+        totalInstallments: data.total_installments,
+        currentInstallment: data.current_installment,
+        dueDate: data.due_date,
+        category: data.category || '',
+        bank: data.bank || '',
+        card: data.card || '',
+        isPaid: data.is_paid,
+        autoConfirm: data.auto_confirm,
+        status: data.status
+      };
+      setScheduledTransactions(prev => [...prev, newTx].sort((a, b) => a.dueDate.localeCompare(b.dueDate)));
+      return newTx;
+    }
+    return null;
+  };
+
+  const updateScheduledTransaction = async (id: string, transaction: Partial<ScheduledTransaction>) => {
+    if (!user) return;
+    
+    const updateData: Record<string, unknown> = {};
+    if (transaction.description !== undefined) updateData.description = transaction.description.toUpperCase();
+    if (transaction.type !== undefined) updateData.type = transaction.type;
+    if (transaction.value !== undefined) updateData.value = transaction.value;
+    if (transaction.totalInstallments !== undefined) updateData.total_installments = transaction.totalInstallments;
+    if (transaction.currentInstallment !== undefined) updateData.current_installment = transaction.currentInstallment;
+    if (transaction.dueDate !== undefined) updateData.due_date = transaction.dueDate;
+    if (transaction.category !== undefined) updateData.category = transaction.category;
+    if (transaction.bank !== undefined) updateData.bank = transaction.bank;
+    if (transaction.card !== undefined) updateData.card = transaction.card;
+    if (transaction.isPaid !== undefined) updateData.is_paid = transaction.isPaid;
+    if (transaction.autoConfirm !== undefined) updateData.auto_confirm = transaction.autoConfirm;
+    if (transaction.status !== undefined) updateData.status = transaction.status;
+    updateData.updated_at = new Date().toISOString();
+    
+    const { error } = await supabase
+      .from('scheduled_transactions')
+      .update(updateData)
+      .eq('id', id);
+    
+    if (error) throw error;
+    
+    setScheduledTransactions(prev => prev.map(t => t.id === id ? { ...t, ...transaction } : t));
+  };
+
+  const deleteScheduledTransaction = async (id: string) => {
+    if (!user) return;
+    
+    const { error } = await supabase
+      .from('scheduled_transactions')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    
+    setScheduledTransactions(prev => prev.filter(t => t.id !== id));
+  };
+
+  const confirmScheduledTransaction = async (id: string, confirmedValue?: number, confirmedDate?: string, useCreditCard?: boolean) => {
+    if (!user) return;
+    
+    const scheduledTx = scheduledTransactions.find(t => t.id === id);
+    if (!scheduledTx) throw new Error('Lançamento não encontrado');
+    
+    const value = confirmedValue || scheduledTx.value;
+    const date = confirmedDate || new Date().toISOString().split('T')[0];
+    
+    // Criar transação real
+    if (useCreditCard && scheduledTx.card) {
+      const { error: ccTxError } = await supabase
+        .from('credit_card_transactions')
+        .insert({
+          user_id: user.id,
+          date: date,
+          description: scheduledTx.description,
+          card: scheduledTx.card,
+          category: scheduledTx.category || '',
+          value: value,
+          is_payment: false
+        });
+      
+      if (ccTxError) throw ccTxError;
+      
+      // Atualizar estado local
+      setCreditCardTransactions(prev => [{
+        id: Date.now().toString(),
+        date: date,
+        description: scheduledTx.description,
+        card: scheduledTx.card,
+        category: scheduledTx.category || '',
+        value: value,
+        isPayment: false
+      }, ...prev]);
+    } else if (scheduledTx.bank) {
+      const { error: txError } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: user.id,
+          date: date,
+          description: scheduledTx.description,
+          bank: scheduledTx.bank,
+          type: 'debit',
+          category: scheduledTx.category || '',
+          value: value
+        });
+      
+      if (txError) throw txError;
+      
+      // Atualizar estado local
+      setTransactions(prev => [{
+        id: Date.now().toString(),
+        date: date,
+        description: scheduledTx.description,
+        bank: scheduledTx.bank,
+        type: 'debit',
+        category: scheduledTx.category || '',
+        value: value
+      }, ...prev]);
+    } else {
+      throw new Error('Lançamento deve ter banco ou cartão definido');
+    }
+    
+    // Atualizar o lançamento futuro
+    let updateData: Partial<ScheduledTransaction> = {
+      isPaid: true
+    };
+    
+    if (scheduledTx.type === 'parcel') {
+      const nextInstallment = scheduledTx.currentInstallment + 1;
+      if (nextInstallment >= scheduledTx.totalInstallments) {
+        updateData.status = 'confirmed';
+        updateData.currentInstallment = nextInstallment;
+      } else {
+        updateData.currentInstallment = nextInstallment;
+        const nextDueDate = new Date(scheduledTx.dueDate);
+        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+        updateData.dueDate = nextDueDate.toISOString().split('T')[0];
+        updateData.isPaid = false;
+      }
+    } else if (scheduledTx.type === 'recurring') {
+      const nextDueDate = new Date(scheduledTx.dueDate);
+      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      updateData.dueDate = nextDueDate.toISOString().split('T')[0];
+      updateData.isPaid = false;
+    } else {
+      updateData.status = 'confirmed';
+    }
+    
+    await updateScheduledTransaction(id, updateData);
+  };
+
   // Helper functions
   const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || id;
   const getCategoryIcon = (id: string) => categories.find(c => c.id === id)?.icon || '📦';
@@ -703,13 +969,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     <FinanceContext.Provider value={{ 
       user, loading, isOnline, isExpired, expiresAt,
       banks, categories, creditCards, transactions, creditCardTransactions, 
+      scheduledTransactions, scheduledTransactionsTableExists,
       login, register, logout, changePassword, 
       addBank, updateBank, deleteBank, getBankBalance, 
       addCategory, updateCategory, deleteCategory, 
       addCreditCard, updateCreditCard, deleteCreditCard, getCardInvoice, getCardTotalDebt, 
       addTransaction, updateTransaction, deleteTransaction, 
       addCreditCardTransaction, updateCreditCardTransaction, deleteCreditCardTransaction, 
-      payCardInvoice, getCategoryName, getCategoryIcon, getBankName, getBankIcon, getCardName, getCardIcon, 
+      payCardInvoice, loadScheduledTransactions, addScheduledTransaction, updateScheduledTransaction, 
+      deleteScheduledTransaction, confirmScheduledTransaction,
+      getCategoryName, getCategoryIcon, getBankName, getBankIcon, getCardName, getCardIcon, 
       exportToCSV, exportToJSON 
     }}>
       {children}

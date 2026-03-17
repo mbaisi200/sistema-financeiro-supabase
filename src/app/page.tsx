@@ -5,6 +5,7 @@ import { useFinance } from '@/contexts/FinanceContext';
 import { AuthScreen } from '@/components/finance/AuthScreen';
 import { Dashboard } from '@/components/finance/Dashboard';
 import { Transactions } from '@/components/finance/Transactions';
+import { ScheduledTransactions } from '@/components/finance/ScheduledTransactions';
 import { CreditCards } from '@/components/finance/CreditCards';
 import { Banks } from '@/components/finance/Banks';
 import { Categories } from '@/components/finance/Categories';
@@ -190,6 +191,7 @@ function AppContent() {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'lancamentos', label: 'Lançamentos', icon: '📝' },
+    { id: 'futuros', label: 'Futuros', icon: '📅' },
     { id: 'cartoes', label: 'Cartões', icon: '💳' },
     { id: 'bancos', label: 'Bancos', icon: '🏦' },
     { id: 'categorias', label: 'Categorias', icon: '🏷️' },
@@ -286,6 +288,7 @@ function AppContent() {
       <main style={{ padding: '1rem' }}>
         {activeTab === 'dashboard' && <Dashboard />}
         {activeTab === 'lancamentos' && <Transactions showNotification={showNotification} />}
+        {activeTab === 'futuros' && <ScheduledTransactions showNotification={showNotification} />}
         {activeTab === 'cartoes' && <CreditCards showNotification={showNotification} />}
         {activeTab === 'bancos' && <Banks showNotification={showNotification} />}
         {activeTab === 'categorias' && <Categories showNotification={showNotification} />}

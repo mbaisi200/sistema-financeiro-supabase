@@ -14,10 +14,11 @@ interface CategoryReport {
 }
 
 export function Dashboard() {
-  const { transactions, banks, creditCardTransactions, categories, creditCards, getBankBalance, getBankName, getBankIcon, getCategoryName, getCategoryIcon, getCardName, getCardIcon } = useFinance();
+  const { transactions, banks, creditCardTransactions, categories, creditCards, scheduledTransactions, getBankBalance, getBankName, getBankIcon, getCategoryName, getCategoryIcon, getCardName, getCardIcon } = useFinance();
   const [filterBank, setFilterBank] = useState('');
   const [filterPeriod, setFilterPeriod] = useState('thisMonth');
   const [categoryReport, setCategoryReport] = useState<CategoryReport | null>(null);
+  const [showAnalysis, setShowAnalysis] = useState(true);
 
   const now = new Date();
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -41,12 +42,11 @@ export function Dashboard() {
   });
 
   // Encontrar ID da categoria PAGAMENTO CARTÃO
-  // Inclui tanto o UUID da categoria quanto a string fixa usada no payCardInvoice
   const pagamentoCartaoCategoryIds = [
     ...categories
       .filter(c => c.name.toUpperCase() === 'PAGAMENTO CARTÃO')
       .map(c => c.id),
-    'pagamento_cartao'  // String fixa usada em payCardInvoice
+    'pagamento_cartao'
   ];
 
   const income = monthTx.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0);
@@ -92,73 +92,118 @@ export function Dashboard() {
   const balance = income - totalExpenses;
   const savingsRate = income > 0 ? ((balance / income) * 100) : 0;
 
+  // ========== NOVA ANÁLISE FINANCEIRA ==========
+  
+  // Lançamentos futuros por mês (próximos 6 meses)
+  const getMonthlyProjections = () => {
+    const projections: { month: string; year: number; monthName: string; scheduled: number; recurring: number }[] = [];
+    
+    for (let i = 0; i < 6; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const monthStr = date.toISOString().substring(0, 7);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+      const monthStart = date.toISOString().split('T')[0];
+      
+      // Filtrar lançamentos futuros do mês
+      const monthScheduled = scheduledTransactions.filter(s => 
+        s.status === 'pending' && 
+        s.dueDate >= monthStart && 
+        s.dueDate <= monthEnd
+      );
+      
+      const scheduledTotal = monthScheduled.reduce((sum, s) => sum + s.value, 0);
+      const recurringTotal = monthScheduled
+        .filter(s => s.type === 'recurring')
+        .reduce((sum, s) => sum + s.value, 0);
+      
+      projections.push({
+        month: monthStr,
+        year: date.getFullYear(),
+        monthName: date.toLocaleDateString('pt-BR', { month: 'short' }),
+        scheduled: scheduledTotal,
+        recurring: recurringTotal
+      });
+    }
+    
+    return projections;
+  };
+
+  const projections = getMonthlyProjections();
+
+  // Receita mensal média (últimos 3 meses)
+  const getAverageIncome = () => {
+    let totalIncome = 0;
+    for (let i = 0; i < 3; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthStart = date.toISOString().split('T')[0];
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+      
+      const monthIncome = transactions
+        .filter(t => t.type === 'credit' && t.date >= monthStart && t.date <= monthEnd)
+        .reduce((sum, t) => sum + t.value, 0);
+      
+      totalIncome += monthIncome;
+    }
+    return totalIncome / 3;
+  };
+
+  const averageIncome = getAverageIncome();
+
+  // Despesas fixas mensais (recorrentes)
+  const monthlyFixedExpenses = scheduledTransactions
+    .filter(s => s.status === 'pending' && s.type === 'recurring')
+    .reduce((sum, s) => sum + s.value, 0);
+
+  // Parcelas deste mês
+  const thisMonthParcels = scheduledTransactions
+    .filter(s => {
+      if (s.status !== 'pending' || s.type !== 'parcel') return false;
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+      return s.dueDate >= monthStart && s.dueDate <= monthEnd;
+    })
+    .reduce((sum, s) => sum + s.value, 0);
+
+  // Receita mínima necessária
+  const minimumRequired = monthlyFixedExpenses + thisMonthParcels + (totalExpenses > 0 ? totalExpenses * 0.8 : 0);
+
+  // Comprometimento da receita
+  const revenueCommitment = averageIncome > 0 ? ((totalExpenses + monthlyFixedExpenses + thisMonthParcels) / averageIncome) * 100 : 0;
+
+  // Saúde financeira (0-100)
+  const financialHealth = Math.max(0, Math.min(100, 100 - revenueCommitment + (savingsRate > 0 ? savingsRate * 0.5 : 0)));
+
   // Função para abrir relatório de categoria
   const openCategoryReport = (categoryId: string, type: 'income' | 'expense' | 'card' | 'total') => {
     let filteredTx: any[] = [];
     let total = 0;
 
     if (type === 'income') {
-      // Receitas - buscar nas transações normais
       filteredTx = monthTx
         .filter(t => t.type === 'credit' && t.category === categoryId)
-        .map(t => ({ 
-          date: t.date, 
-          description: t.description, 
-          bank: t.bank, 
-          card: null,
-          value: t.value 
-        }));
+        .map(t => ({ date: t.date, description: t.description, bank: t.bank, card: null, value: t.value }));
       total = filteredTx.reduce((s, t) => s + t.value, 0);
     } else if (type === 'expense') {
-      // Despesas - buscar nas transações normais (débito)
       filteredTx = monthTx
         .filter(t => t.type === 'debit' && t.category === categoryId)
-        .map(t => ({ 
-          date: t.date, 
-          description: t.description, 
-          bank: t.bank, 
-          card: null,
-          value: t.value 
-        }));
+        .map(t => ({ date: t.date, description: t.description, bank: t.bank, card: null, value: t.value }));
       total = filteredTx.reduce((s, t) => s + t.value, 0);
     } else if (type === 'card') {
-      // Cartão - buscar nas transações de cartão
       filteredTx = ccFiltered
         .filter(t => !t.isPayment && t.value > 0 && t.category === categoryId)
-        .map(t => ({ 
-          date: t.date, 
-          description: t.description, 
-          bank: null, 
-          card: t.card,
-          value: t.value 
-        }));
+        .map(t => ({ date: t.date, description: t.description, bank: null, card: t.card, value: t.value }));
       total = filteredTx.reduce((s, t) => s + t.value, 0);
     } else if (type === 'total') {
-      // Total Despesas - buscar em ambas as fontes
       const bankTx = monthTx
         .filter(t => t.type === 'debit' && t.category === categoryId)
-        .map(t => ({ 
-          date: t.date, 
-          description: t.description, 
-          bank: t.bank, 
-          card: null,
-          value: t.value 
-        }));
+        .map(t => ({ date: t.date, description: t.description, bank: t.bank, card: null, value: t.value }));
       const cardTx = ccFiltered
         .filter(t => !t.isPayment && t.value > 0 && t.category === categoryId)
-        .map(t => ({ 
-          date: t.date, 
-          description: t.description, 
-          bank: null, 
-          card: t.card,
-          value: t.value 
-        }));
+        .map(t => ({ date: t.date, description: t.description, bank: null, card: t.card, value: t.value }));
       filteredTx = [...bankTx, ...cardTx];
       total = filteredTx.reduce((s, t) => s + t.value, 0);
     }
 
-    console.log('Category Report:', { categoryId, type, count: filteredTx.length, total });
-    
     setCategoryReport({
       categoryId,
       categoryName: getCategoryName(categoryId),
@@ -197,16 +242,7 @@ export function Dashboard() {
           {entries.map(([cat, value], i) => (
             <div 
               key={cat} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '5px', 
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                padding: '0.25rem 0.5rem',
-                borderRadius: '0.25rem',
-                transition: 'background 0.2s'
-              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', cursor: 'pointer', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', transition: 'background 0.2s' }}
               onClick={() => openCategoryReport(cat, type)}
               onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
@@ -225,7 +261,6 @@ export function Dashboard() {
     );
   };
 
-  // Period label
   const getPeriodLabel = () => {
     if (filterPeriod === 'thisMonth') return 'Este Mês';
     if (filterPeriod === 'lastMonth') return 'Mês Anterior';
@@ -320,6 +355,150 @@ export function Dashboard() {
         </div>
       </div>
 
+      {/* ========== ANÁLISE FINANCEIRA ========== */}
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h3 style={{ margin: 0 }}>📊 Análise Financeira</h3>
+          <button 
+            className="btn btn-sm btn-secondary" 
+            onClick={() => setShowAnalysis(!showAnalysis)}
+          >
+            {showAnalysis ? '🔼 Ocultar' : '🔽 Mostrar'}
+          </button>
+        </div>
+
+        {showAnalysis && (
+          <>
+            {/* Indicadores de Saúde */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+              {/* Saúde Financeira */}
+              <div style={{ 
+                padding: '1rem', 
+                background: financialHealth >= 50 ? '#f0fdf4' : '#fef2f2', 
+                borderRadius: '0.75rem',
+                border: `2px solid ${financialHealth >= 50 ? '#86efac' : '#fca5a5'}`
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>{financialHealth >= 70 ? '💚' : financialHealth >= 50 ? '💛' : '❤️'}</span>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>Saúde Financeira</span>
+                </div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: financialHealth >= 50 ? '#22c55e' : '#ef4444' }}>
+                  {financialHealth.toFixed(0)}%
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                  {financialHealth >= 70 ? 'Excelente!' : financialHealth >= 50 ? 'Razoável' : 'Atenção!'}
+                </div>
+              </div>
+
+              {/* Comprometimento */}
+              <div style={{ 
+                padding: '1rem', 
+                background: revenueCommitment <= 70 ? '#f0fdf4' : revenueCommitment <= 100 ? '#fff7ed' : '#fef2f2', 
+                borderRadius: '0.75rem',
+                border: `2px solid ${revenueCommitment <= 70 ? '#86efac' : revenueCommitment <= 100 ? '#fdba74' : '#fca5a5'}`
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>📈</span>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>Comprometimento</span>
+                </div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: revenueCommitment <= 70 ? '#22c55e' : revenueCommitment <= 100 ? '#f59e0b' : '#ef4444' }}>
+                  {revenueCommitment.toFixed(0)}%
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                  da receita comprometida
+                </div>
+              </div>
+
+              {/* Receita Mínima */}
+              <div style={{ 
+                padding: '1rem', 
+                background: '#eff6ff', 
+                borderRadius: '0.75rem',
+                border: '2px solid #93c5fd'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>🎯</span>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>Receita Mínima</span>
+                </div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#2563eb' }}>
+                  {fmt(minimumRequired)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                  mensal necessária
+                </div>
+              </div>
+
+              {/* Despesas Fixas */}
+              <div style={{ 
+                padding: '1rem', 
+                background: '#faf5ff', 
+                borderRadius: '0.75rem',
+                border: '2px solid #d8b4fe'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>🔄</span>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>Despesas Fixas</span>
+                </div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#9333ea' }}>
+                  {fmt(monthlyFixedExpenses)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                  recorrentes mensais
+                </div>
+              </div>
+            </div>
+
+            {/* Projeção por Mês */}
+            <h4 style={{ marginBottom: '1rem' }}>📅 Projeção Próximos 6 Meses</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.5rem', marginBottom: '1.5rem' }}>
+              {projections.map((p, i) => (
+                <div key={p.month} style={{ 
+                  padding: '0.75rem', 
+                  background: i === 0 ? '#eff6ff' : '#f9fafb', 
+                  borderRadius: '0.5rem',
+                  textAlign: 'center',
+                  border: i === 0 ? '2px solid #3b82f6' : '1px solid #e5e7eb'
+                }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>
+                    {p.monthName}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: p.scheduled > 0 ? '#ef4444' : '#22c55e', marginTop: '0.25rem' }}>
+                    {p.scheduled > 0 ? fmt(p.scheduled) : 'R$ 0'}
+                  </div>
+                  {p.recurring > 0 && (
+                    <div style={{ fontSize: '0.65rem', color: '#9ca3af' }}>
+                      🔁 {fmt(p.recurring)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Dicas */}
+            <div style={{ background: '#f0f9ff', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #bae6fd' }}>
+              <h5 style={{ margin: '0 0 0.5rem 0', color: '#0369a1' }}>💡 Dicas para sua Vida Financeira</h5>
+              <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.85rem', color: '#0c4a6e' }}>
+                {savingsRate < 10 && (
+                  <li>Tente reservar pelo menos 10% da sua receita mensal para emergências</li>
+                )}
+                {revenueCommitment > 80 && (
+                  <li>Seu comprometimento está alto ({revenueCommitment.toFixed(0)}%). Reveja despesas não essenciais</li>
+                )}
+                {monthlyFixedExpenses > averageIncome * 0.5 && (
+                  <li>Suas despesas fixas representam mais de 50% da receita média. Considere renegociar contratos</li>
+                )}
+                {totalBalance < 0 && (
+                  <li>Seu saldo está negativo! Priorize quitar dívidas com juros altos</li>
+                )}
+                {financialHealth >= 70 && (
+                  <li>Parabéns! Sua saúde financeira está ótima. Continue assim! 🎉</li>
+                )}
+              </ul>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* Gráfico Receitas x Despesas */}
       <div className="card" style={{ marginTop: '1rem' }}>
         <h3 style={{ marginBottom: '1rem', textAlign: 'center' }}>📊 Receitas x Despesas</h3>
@@ -350,11 +529,7 @@ export function Dashboard() {
                 textAlign: 'center'
               }}>
                 <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>Saldo</div>
-                <div style={{ 
-                  fontSize: '1rem', 
-                  fontWeight: 'bold', 
-                  color: balance >= 0 ? '#22c55e' : '#ef4444' 
-                }}>
+                <div style={{ fontSize: '1rem', fontWeight: 'bold', color: balance >= 0 ? '#22c55e' : '#ef4444' }}>
                   {fmt(balance)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
@@ -380,18 +555,9 @@ export function Dashboard() {
                 <div style={{ fontSize: '0.9rem' }}>{fmt(totalExpenses)} ({expensePercent.toFixed(1)}%)</div>
               </div>
             </div>
-            <div style={{ 
-              padding: '0.75rem', 
-              background: balance >= 0 ? '#f0fdf4' : '#fef2f2', 
-              borderRadius: '0.5rem',
-              border: `1px solid ${balance >= 0 ? '#86efac' : '#fca5a5'}`
-            }}>
+            <div style={{ padding: '0.75rem', background: balance >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: '0.5rem', border: `1px solid ${balance >= 0 ? '#86efac' : '#fca5a5'}` }}>
               <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Taxa de Economia</div>
-              <div style={{ 
-                fontSize: '1.25rem', 
-                fontWeight: 'bold', 
-                color: balance >= 0 ? '#22c55e' : '#ef4444' 
-              }}>
+              <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: balance >= 0 ? '#22c55e' : '#ef4444' }}>
                 {savingsRate >= 0 ? '📈 ' : '📉 '}{savingsRate.toFixed(1)}%
               </div>
             </div>
@@ -401,34 +567,10 @@ export function Dashboard() {
         {/* Barra visual */}
         <div style={{ marginTop: '1.5rem' }}>
           <div style={{ display: 'flex', height: 30, borderRadius: 8, overflow: 'hidden', background: '#e5e7eb' }}>
-            <div 
-              style={{ 
-                width: `${revenuePercent}%`, 
-                background: '#22c55e', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                color: 'white',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                minWidth: revenuePercent > 10 ? 60 : 0
-              }}
-            >
+            <div style={{ width: `${revenuePercent}%`, background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.75rem', fontWeight: 600, minWidth: revenuePercent > 10 ? 60 : 0 }}>
               {revenuePercent > 10 && `${revenuePercent.toFixed(0)}%`}
             </div>
-            <div 
-              style={{ 
-                width: `${expensePercent}%`, 
-                background: '#ef4444', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                color: 'white',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                minWidth: expensePercent > 10 ? 60 : 0
-              }}
-            >
+            <div style={{ width: `${expensePercent}%`, background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.75rem', fontWeight: 600, minWidth: expensePercent > 10 ? 60 : 0 }}>
               {expensePercent > 10 && `${expensePercent.toFixed(0)}%`}
             </div>
           </div>
@@ -473,13 +615,7 @@ export function Dashboard() {
             flexDirection: 'column'
           }} onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div style={{ 
-              padding: '1rem 1.5rem', 
-              borderBottom: '1px solid #e5e7eb',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
+            <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   {categoryReport.categoryIcon} {categoryReport.categoryName}
@@ -488,32 +624,15 @@ export function Dashboard() {
                   {getPeriodLabel()} • {categoryReport.type === 'income' ? 'Receitas' : categoryReport.type === 'card' ? 'Cartão' : 'Despesas'}
                 </small>
               </div>
-              <button 
-                onClick={() => setCategoryReport(null)}
-                style={{ 
-                  background: 'none', 
-                  border: 'none', 
-                  fontSize: '1.5rem', 
-                  cursor: 'pointer',
-                  color: '#6b7280'
-                }}
-              >
+              <button onClick={() => setCategoryReport(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>
                 ×
               </button>
             </div>
             
             {/* Total */}
-            <div style={{ 
-              padding: '1rem 1.5rem', 
-              background: categoryReport.type === 'income' ? '#f0fdf4' : '#fef2f2',
-              borderBottom: '1px solid #e5e7eb'
-            }}>
+            <div style={{ padding: '1rem 1.5rem', background: categoryReport.type === 'income' ? '#f0fdf4' : '#fef2f2', borderBottom: '1px solid #e5e7eb' }}>
               <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Total</div>
-              <div style={{ 
-                fontSize: '1.5rem', 
-                fontWeight: 'bold', 
-                color: categoryReport.type === 'income' ? '#22c55e' : '#ef4444' 
-              }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: categoryReport.type === 'income' ? '#22c55e' : '#ef4444' }}>
                 {fmt(categoryReport.total)}
               </div>
               <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
@@ -549,9 +668,7 @@ export function Dashboard() {
                             <span className="badge bank">{getBankIcon(t.bank)} {getBankName(t.bank)}</span>
                           )}
                         </td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                          {fmt(t.value)}
-                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(t.value)}</td>
                       </tr>
                     ))}
                   </tbody>

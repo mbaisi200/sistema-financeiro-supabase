@@ -16,6 +16,7 @@ export function Transactions({ showNotification }: { showNotification: (msg: str
   const [editTx, setEditTx] = useState<any>(null);
   const [showEdit, setShowEdit] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const descriptionRef = useRef<HTMLInputElement>(null);
 
   const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -29,11 +30,26 @@ export function Transactions({ showNotification }: { showNotification: (msg: str
     if (filters.type && t.type !== filters.type) return false;
     if (filters.category && t.category !== filters.category) return false;
     if (filters.date === 'thisMonth' && !t.date.startsWith(thisMonthStr)) return false;
+    if (searchTerm && !t.description.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     return true;
   });
 
+  // Calcular totais do período
+  const periodTotalCredit = filteredTx.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0);
+  const periodTotalDebit = filteredTx.filter(t => t.type === 'debit').reduce((s, t) => s + t.value, 0);
+  const periodBalance = periodTotalCredit - periodTotalDebit;
+
+  // Agrupar por data
+  const groupedByDate = filteredTx.reduce((acc, t) => {
+    if (!acc[t.date]) acc[t.date] = [];
+    acc[t.date].push(t);
+    return acc;
+  }, {} as Record<string, typeof transactions>);
+
+  const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a));
+
   const handleAdd = async () => {
-    if (isAdding) return; // Prevenir múltiplos cliques
+    if (isAdding) return;
     
     if (!form.description || !form.bank || !form.category || !form.value) {
       showNotification('Preencha todos os campos!', 'error');
@@ -42,13 +58,11 @@ export function Transactions({ showNotification }: { showNotification: (msg: str
     
     setIsAdding(true);
     try {
-      // Converter descrição para maiúsculo
       await addTransaction({ 
         ...form, 
         description: toUpperCase(form.description),
         value: parseFloat(form.value) 
       });
-      // Mantém os dados anteriores, exceto descrição e valor
       setForm({ 
         date: form.date, 
         description: '', 
@@ -58,14 +72,12 @@ export function Transactions({ showNotification }: { showNotification: (msg: str
         value: '' 
       });
       showNotification('Transação adicionada!', 'success');
-      // Foca no campo descrição para próxima digitação
       descriptionRef.current?.focus();
     } catch (error: any) {
       console.error('Erro ao adicionar transação:', error);
       const errorMsg = error?.message || 'Falha ao adicionar';
       showNotification(`Erro: ${errorMsg}`, 'error');
       
-      // Se for erro de sessão, mostrar mensagem específica
       if (errorMsg.includes('Sessão') || errorMsg.includes('JWT')) {
         showNotification('Sessão expirada! Por favor, faça login novamente.', 'error');
       }
@@ -74,11 +86,8 @@ export function Transactions({ showNotification }: { showNotification: (msg: str
     }
   };
 
-  // Enter para adicionar
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleAdd();
-    }
+    if (e.key === 'Enter') handleAdd();
   };
 
   const handleDelete = async (id: string) => {
@@ -96,13 +105,12 @@ export function Transactions({ showNotification }: { showNotification: (msg: str
     setInitialValue('');
   };
 
-  // Calculate balances
   const balances: Record<string, number> = {};
   banks.forEach(b => { balances[b.id] = getBankBalance(b.id); });
 
   return (
     <div>
-      {/* New Transaction */}
+      {/* Novo Lançamento */}
       <div className="card">
         <h3 style={{ marginBottom: '1rem' }}>📝 Novo Lançamento</h3>
         <div className="form-grid" onKeyPress={handleKeyPress}>
@@ -132,8 +140,8 @@ export function Transactions({ showNotification }: { showNotification: (msg: str
           <div className="form-group">
             <label className="form-label">Tipo</label>
             <select className="form-select" value={form.type} onChange={e => setForm({...form, type: e.target.value as any})}>
-              <option value="debit">Débito</option>
-              <option value="credit">Crédito</option>
+              <option value="debit">💸 Débito (Saída)</option>
+              <option value="credit">💰 Crédito (Entrada)</option>
             </select>
           </div>
           <div className="form-group">
@@ -158,13 +166,13 @@ export function Transactions({ showNotification }: { showNotification: (msg: str
             />
           </div>
           <button className="btn btn-primary" style={{ marginTop: '1.5rem' }} onClick={handleAdd} disabled={isAdding}>
-            {isAdding ? 'Adicionando...' : 'Adicionar'}
+            {isAdding ? '⏳ Adicionando...' : '➕ Adicionar'}
           </button>
         </div>
 
-        {/* Initial Balance */}
+        {/* Saldo Inicial */}
         <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e5e7eb' }}>
-          <h4 style={{ marginBottom: '1rem' }}>Ajustar Saldo Inicial</h4>
+          <h4 style={{ marginBottom: '1rem', fontSize: '0.95rem', color: '#6b7280' }}>⚙️ Ajustar Saldo Inicial</h4>
           <div className="form-grid">
             <div className="form-group">
               <select className="form-select" value={initialBank} onChange={e => setInitialBank(e.target.value)}>
@@ -175,77 +183,222 @@ export function Transactions({ showNotification }: { showNotification: (msg: str
             <div className="form-group">
               <input type="number" step="0.01" className="form-input" placeholder="Valor (R$)" value={initialValue} onChange={e => setInitialValue(e.target.value)} />
             </div>
-            <button className="btn btn-success" style={{ marginTop: '0' }} onClick={handleInitialBalance}>Salvar</button>
+            <button className="btn btn-success" style={{ marginTop: '0' }} onClick={handleInitialBalance}>💾 Salvar</button>
           </div>
         </div>
       </div>
 
-      {/* Payment Card */}
+      {/* Pagamento de Fatura */}
       <div className="card payment-card">
         <h3 style={{ marginBottom: '1rem', color: '#3b82f6' }}>💳 Pagamento de Fatura</h3>
         <PaymentForm banks={banks} creditCards={[]} showNotification={showNotification} />
       </div>
 
-      {/* Filters & List */}
+      {/* Resumo do Período */}
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
+          <div style={{ textAlign: 'center', padding: '1rem', background: '#f0fdf4', borderRadius: '0.5rem' }}>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>ENTRADAS</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#22c55e' }}>{fmt(periodTotalCredit)}</div>
+          </div>
+          <div style={{ textAlign: 'center', padding: '1rem', background: '#fef2f2', borderRadius: '0.5rem' }}>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>SAÍDAS</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#ef4444' }}>{fmt(periodTotalDebit)}</div>
+          </div>
+          <div style={{ textAlign: 'center', padding: '1rem', background: periodBalance >= 0 ? '#eff6ff' : '#fef2f2', borderRadius: '0.5rem' }}>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>SALDO</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: periodBalance >= 0 ? '#2563eb' : '#ef4444' }}>
+              {fmt(periodBalance)}
+            </div>
+          </div>
+          <div style={{ textAlign: 'center', padding: '1rem', background: '#f9fafb', borderRadius: '0.5rem' }}>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>LANÇAMENTOS</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#374151' }}>{filteredTx.length}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filtros e Lista */}
       <div className="card">
-        <div className="filter-bar">
-          <select className="form-select" value={filters.bank} onChange={e => setFilters({...filters, bank: e.target.value})}>
-            <option value="">Bancos</option>
-            {banks.map(b => <option key={b.id} value={b.id}>{b.icon} {b.name}</option>)}
-          </select>
-          <select className="form-select" value={filters.type} onChange={e => setFilters({...filters, type: e.target.value})}>
-            <option value="">Tipos</option>
-            <option value="credit">Crédito</option>
-            <option value="debit">Débito</option>
-          </select>
-          <select className="form-select" value={filters.category} onChange={e => setFilters({...filters, category: e.target.value})}>
-            <option value="">Categorias</option>
-            {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-          </select>
-          <select className="form-select" value={filters.date} onChange={e => setFilters({...filters, date: e.target.value})}>
-            <option value="">Datas</option>
-            <option value="thisMonth">Este Mês</option>
-          </select>
-          <button className="btn btn-secondary btn-sm" onClick={() => setFilters({ bank: '', type: '', category: '', date: 'thisMonth' })}>Limpar</button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h3 style={{ margin: 0 }}>📋 Lançamentos</h3>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="btn btn-sm btn-secondary" onClick={() => {
+              const csv = exportToCSV();
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `lancamentos_${new Date().toISOString().split('T')[0]}.csv`;
+              a.click();
+            }}>
+              📥 CSV
+            </button>
+          </div>
         </div>
 
-        <div className="table-container">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Ações</th>
-                <th>Data</th>
-                <th>Desc</th>
-                <th>Banco</th>
-                <th>Cat</th>
-                <th>Tipo</th>
-                <th>Valor</th>
-                <th>Saldo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTx.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>Nenhum lançamento</td></tr>
-              ) : filteredTx.map(t => (
-                <tr key={t.id}>
-                  <td>
-                    <div className="table-actions">
-                      <button className="btn btn-sm btn-secondary" onClick={() => { setEditTx(t); setShowEdit(true); }}>✏️</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(t.id)}>🗑️</button>
-                    </div>
-                  </td>
-                  <td>{fmtDate(t.date)}</td>
-                  <td>{t.description}</td>
-                  <td><span className="badge bank">{getBankIcon(t.bank)} {getBankName(t.bank)}</span></td>
-                  <td><span className="badge category">{getCategoryIcon(t.category)} {getCategoryName(t.category)}</span></td>
-                  <td><span className={`badge ${t.type}`}>{t.type === 'credit' ? 'Entrada' : 'Saída'}</span></td>
-                  <td className={`text-right ${t.type === 'debit' ? 'value-debit' : 'value-credit'}`}>{fmt(t.value)}</td>
-                  <td className="text-right">{fmt(balances[t.bank] || 0)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* Filtros */}
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="🔍 Buscar por descrição..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{ flex: 1 }}
+            />
+          </div>
+          <div className="filter-bar">
+            <select className="form-select" value={filters.bank} onChange={e => setFilters({...filters, bank: e.target.value})}>
+              <option value="">Bancos</option>
+              {banks.map(b => <option key={b.id} value={b.id}>{b.icon} {b.name}</option>)}
+            </select>
+            <select className="form-select" value={filters.type} onChange={e => setFilters({...filters, type: e.target.value})}>
+              <option value="">Tipos</option>
+              <option value="credit">💰 Entrada</option>
+              <option value="debit">💸 Saída</option>
+            </select>
+            <select className="form-select" value={filters.category} onChange={e => setFilters({...filters, category: e.target.value})}>
+              <option value="">Categorias</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+            </select>
+            <select className="form-select" value={filters.date} onChange={e => setFilters({...filters, date: e.target.value})}>
+              <option value="">Todas as Datas</option>
+              <option value="thisMonth">Este Mês</option>
+            </select>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setFilters({ bank: '', type: '', category: '', date: 'thisMonth' }); setSearchTerm(''); }}>Limpar</button>
+          </div>
         </div>
+
+        {/* Lista agrupada por data */}
+        {sortedDates.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>📭</div>
+            Nenhum lançamento encontrado
+          </div>
+        ) : (
+          <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+            {sortedDates.map(date => {
+              const dayTx = groupedByDate[date];
+              const dayCredit = dayTx.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0);
+              const dayDebit = dayTx.filter(t => t.type === 'debit').reduce((s, t) => s + t.value, 0);
+              
+              return (
+                <div key={date} style={{ marginBottom: '1rem' }}>
+                  {/* Cabeçalho da data */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0.5rem 1rem',
+                    background: '#f8fafc',
+                    borderRadius: '0.5rem',
+                    marginBottom: '0.25rem',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 10,
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontWeight: 600, color: '#475569' }}>{fmtDate(date)}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                        ({dayTx.length} lançamento{dayTx.length !== 1 ? 's' : ''})
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem' }}>
+                      {dayCredit > 0 && <span style={{ color: '#22c55e', fontWeight: 600 }}>+{fmt(dayCredit)}</span>}
+                      {dayDebit > 0 && <span style={{ color: '#ef4444', fontWeight: 600 }}>-{fmt(dayDebit)}</span>}
+                    </div>
+                  </div>
+
+                  {/* Transações do dia */}
+                  <div className="table-container">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '80px' }}>Ações</th>
+                          <th>Descrição</th>
+                          <th>Banco</th>
+                          <th>Categoria</th>
+                          <th style={{ width: '80px' }}>Tipo</th>
+                          <th style={{ width: '120px', textAlign: 'right' }}>Valor</th>
+                          <th style={{ width: '120px', textAlign: 'right' }}>Saldo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dayTx.map((t, idx) => (
+                          <tr key={t.id} style={{ 
+                            background: idx % 2 === 0 ? 'white' : '#fafafa',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#f0f9ff'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = idx % 2 === 0 ? 'white' : '#fafafa'}
+                          >
+                            <td>
+                              <div className="table-actions">
+                                <button 
+                                  className="btn btn-sm btn-secondary" 
+                                  onClick={() => { setEditTx(t); setShowEdit(true); }}
+                                  title="Editar"
+                                >
+                                  ✏️
+                                </button>
+                                <button 
+                                  className="btn btn-sm btn-danger" 
+                                  onClick={() => handleDelete(t.id)}
+                                  title="Excluir"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                            <td>
+                              <strong>{t.description}</strong>
+                            </td>
+                            <td>
+                              <span className="badge bank" style={{ fontSize: '0.75rem' }}>
+                                {getBankIcon(t.bank)} {getBankName(t.bank)}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="badge category" style={{ fontSize: '0.75rem' }}>
+                                {getCategoryIcon(t.category)} {getCategoryName(t.category)}
+                              </span>
+                            </td>
+                            <td>
+                              <span 
+                                className="badge" 
+                                style={{ 
+                                  fontSize: '0.7rem',
+                                  background: t.type === 'credit' ? '#dcfce7' : '#fee2e2',
+                                  color: t.type === 'credit' ? '#166534' : '#991b1b'
+                                }}
+                              >
+                                {t.type === 'credit' ? '💰 Entrada' : '💸 Saída'}
+                              </span>
+                            </td>
+                            <td style={{ 
+                              textAlign: 'right', 
+                              fontWeight: 600,
+                              fontSize: '0.9rem',
+                              color: t.type === 'debit' ? '#ef4444' : '#22c55e'
+                            }}>
+                              {t.type === 'debit' ? '-' : '+'}{fmt(t.value)}
+                            </td>
+                            <td style={{ textAlign: 'right', color: '#6b7280', fontSize: '0.85rem' }}>
+                              {fmt(balances[t.bank] || 0)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <EditTransactionModal
@@ -299,7 +452,7 @@ function PaymentForm({ banks, creditCards, showNotification }: { banks: any[], c
         <label className="form-label">Valor</label>
         <input type="number" step="0.01" className="form-input" placeholder="0,00" value={form.value} onChange={e => setForm({...form, value: e.target.value})} />
       </div>
-      <button className="btn btn-success" style={{ marginTop: '1.5rem' }} onClick={handlePay}>Pagar</button>
+      <button className="btn btn-success" style={{ marginTop: '1.5rem' }} onClick={handlePay}>💳 Pagar Fatura</button>
     </div>
   );
 }
