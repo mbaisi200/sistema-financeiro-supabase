@@ -93,38 +93,50 @@ export function Dashboard() {
   const savingsRate = income > 0 ? ((balance / income) * 100) : 0;
 
   // ========== NOVA ANÁLISE FINANCEIRA ==========
-  
+
   // Lançamentos futuros por mês (próximos 6 meses)
   const getMonthlyProjections = () => {
-    const projections: { month: string; year: number; monthName: string; scheduled: number; recurring: number }[] = [];
-    
+    const projections: { month: string; year: number; monthName: string; scheduledExpenses: number; scheduledIncome: number; netBalance: number; recurringExpenses: number; recurringIncome: number }[] = [];
+
     for (let i = 0; i < 6; i++) {
       const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
       const monthStr = date.toISOString().substring(0, 7);
       const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
       const monthStart = date.toISOString().split('T')[0];
-      
+
       // Filtrar lançamentos futuros do mês
-      const monthScheduled = scheduledTransactions.filter(s => 
-        s.status === 'pending' && 
-        s.dueDate >= monthStart && 
+      const monthScheduled = scheduledTransactions.filter(s =>
+        s.status === 'pending' &&
+        s.dueDate >= monthStart &&
         s.dueDate <= monthEnd
       );
-      
-      const scheduledTotal = monthScheduled.reduce((sum, s) => sum + s.value, 0);
-      const recurringTotal = monthScheduled
+
+      // Separar receitas e despesas
+      const monthExpenses = monthScheduled.filter(s => s.transactionType !== 'credit');
+      const monthIncome = monthScheduled.filter(s => s.transactionType === 'credit');
+
+      const scheduledExpenses = monthExpenses.reduce((sum, s) => sum + s.value, 0);
+      const scheduledIncome = monthIncome.reduce((sum, s) => sum + s.value, 0);
+
+      const recurringExpenses = monthExpenses
         .filter(s => s.type === 'recurring')
         .reduce((sum, s) => sum + s.value, 0);
-      
+      const recurringIncome = monthIncome
+        .filter(s => s.type === 'recurring')
+        .reduce((sum, s) => sum + s.value, 0);
+
       projections.push({
         month: monthStr,
         year: date.getFullYear(),
         monthName: date.toLocaleDateString('pt-BR', { month: 'short' }),
-        scheduled: scheduledTotal,
-        recurring: recurringTotal
+        scheduledExpenses,
+        scheduledIncome,
+        netBalance: scheduledIncome - scheduledExpenses,
+        recurringExpenses,
+        recurringIncome
       });
     }
-    
+
     return projections;
   };
 
@@ -137,11 +149,11 @@ export function Dashboard() {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthStart = date.toISOString().split('T')[0];
       const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
-      
+
       const monthIncome = transactions
         .filter(t => t.type === 'credit' && t.date >= monthStart && t.date <= monthEnd)
         .reduce((sum, t) => sum + t.value, 0);
-      
+
       totalIncome += monthIncome;
     }
     return totalIncome / 3;
@@ -149,26 +161,44 @@ export function Dashboard() {
 
   const averageIncome = getAverageIncome();
 
-  // Despesas fixas mensais (recorrentes)
+  // Despesas fixas mensais (recorrentes) - apenas débitos
   const monthlyFixedExpenses = scheduledTransactions
-    .filter(s => s.status === 'pending' && s.type === 'recurring')
+    .filter(s => s.status === 'pending' && s.type === 'recurring' && s.transactionType !== 'credit')
     .reduce((sum, s) => sum + s.value, 0);
 
-  // Parcelas deste mês
+  // Receitas fixas mensais (recorrentes) - apenas créditos
+  const monthlyFixedIncome = scheduledTransactions
+    .filter(s => s.status === 'pending' && s.type === 'recurring' && s.transactionType === 'credit')
+    .reduce((sum, s) => sum + s.value, 0);
+
+  // Parcelas de despesas deste mês
   const thisMonthParcels = scheduledTransactions
     .filter(s => {
-      if (s.status !== 'pending' || s.type !== 'parcel') return false;
+      if (s.status !== 'pending' || s.type !== 'parcel' || s.transactionType === 'credit') return false;
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
       const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
       return s.dueDate >= monthStart && s.dueDate <= monthEnd;
     })
     .reduce((sum, s) => sum + s.value, 0);
 
-  // Receita mínima necessária
-  const minimumRequired = monthlyFixedExpenses + thisMonthParcels + (totalExpenses > 0 ? totalExpenses * 0.8 : 0);
+  // Parcelas de receitas deste mês
+  const thisMonthParcelsIncome = scheduledTransactions
+    .filter(s => {
+      if (s.status !== 'pending' || s.type !== 'parcel' || s.transactionType !== 'credit') return false;
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+      return s.dueDate >= monthStart && s.dueDate <= monthEnd;
+    })
+    .reduce((sum, s) => sum + s.value, 0);
 
-  // Comprometimento da receita
-  const revenueCommitment = averageIncome > 0 ? ((totalExpenses + monthlyFixedExpenses + thisMonthParcels) / averageIncome) * 100 : 0;
+  // Receita mínima necessária (considerando receitas programadas)
+  const totalScheduledIncome = monthlyFixedIncome + thisMonthParcelsIncome;
+  const minimumRequired = Math.max(0, monthlyFixedExpenses + thisMonthParcels + (totalExpenses > 0 ? totalExpenses * 0.8 : 0) - totalScheduledIncome);
+
+  // Comprometimento da receita (considerando receitas programadas)
+  const totalScheduledExpenses = monthlyFixedExpenses + thisMonthParcels;
+  const effectiveIncome = averageIncome + monthlyFixedIncome + thisMonthParcelsIncome;
+  const revenueCommitment = effectiveIncome > 0 ? ((totalExpenses + totalScheduledExpenses) / effectiveIncome) * 100 : 0;
 
   // Saúde financeira (0-100)
   const financialHealth = Math.max(0, Math.min(100, 100 - revenueCommitment + (savingsRate > 0 ? savingsRate * 0.5 : 0)));
@@ -446,11 +476,32 @@ export function Dashboard() {
                   recorrentes mensais
                 </div>
               </div>
+
+              {/* Receitas Fixas Programadas */}
+              {monthlyFixedIncome > 0 && (
+                <div style={{ 
+                  padding: '1rem', 
+                  background: '#f0fdf4', 
+                  borderRadius: '0.75rem',
+                  border: '2px solid #86efac'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '1.5rem' }}>💰</span>
+                    <span style={{ fontWeight: 600, color: '#374151' }}>Receitas Fixas</span>
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#22c55e' }}>
+                    +{fmt(monthlyFixedIncome)}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                    receitas programadas
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Projeção por Mês */}
             <h4 style={{ marginBottom: '1rem' }}>📅 Projeção Próximos 6 Meses</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.5rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.5rem', marginBottom: '1rem' }}>
               {projections.map((p, i) => (
                 <div key={p.month} style={{ 
                   padding: '0.75rem', 
@@ -462,16 +513,43 @@ export function Dashboard() {
                   <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>
                     {p.monthName}
                   </div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: p.scheduled > 0 ? '#ef4444' : '#22c55e', marginTop: '0.25rem' }}>
-                    {p.scheduled > 0 ? fmt(p.scheduled) : 'R$ 0'}
+                  {/* Despesas */}
+                  {p.scheduledExpenses > 0 && (
+                    <div style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '0.25rem' }}>
+                      -{fmt(p.scheduledExpenses)}
+                    </div>
+                  )}
+                  {/* Receitas */}
+                  {p.scheduledIncome > 0 && (
+                    <div style={{ fontSize: '0.8rem', color: '#22c55e' }}>
+                      +{fmt(p.scheduledIncome)}
+                    </div>
+                  )}
+                  {/* Saldo Líquido */}
+                  <div style={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: 'bold', 
+                    color: p.netBalance >= 0 ? '#22c55e' : '#ef4444',
+                    borderTop: '1px solid #e5e7eb',
+                    marginTop: '0.25rem',
+                    paddingTop: '0.25rem'
+                  }}>
+                    {p.netBalance >= 0 ? '+' : ''}{fmt(p.netBalance)}
                   </div>
-                  {p.recurring > 0 && (
-                    <div style={{ fontSize: '0.65rem', color: '#9ca3af' }}>
-                      🔁 {fmt(p.recurring)}
+                  {p.recurringExpenses > 0 && (
+                    <div style={{ fontSize: '0.6rem', color: '#ef4444' }}>
+                      🔁 {fmt(p.recurringExpenses)}
                     </div>
                   )}
                 </div>
               ))}
+            </div>
+
+            {/* Legenda */}
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '1rem', fontSize: '0.75rem', color: '#6b7280' }}>
+              <span>🔴 Despesas Programadas</span>
+              <span>🟢 Receitas Programadas</span>
+              <span>📊 Saldo Líquido</span>
             </div>
 
             {/* Dicas */}
@@ -484,11 +562,14 @@ export function Dashboard() {
                 {revenueCommitment > 80 && (
                   <li>Seu comprometimento está alto ({revenueCommitment.toFixed(0)}%). Reveja despesas não essenciais</li>
                 )}
-                {monthlyFixedExpenses > averageIncome * 0.5 && (
-                  <li>Suas despesas fixas representam mais de 50% da receita média. Considere renegociar contratos</li>
+                {monthlyFixedExpenses > (averageIncome + monthlyFixedIncome) * 0.5 && (
+                  <li>Suas despesas fixas representam mais de 50% da receita. Considere renegociar contratos</li>
                 )}
                 {totalBalance < 0 && (
                   <li>Seu saldo está negativo! Priorize quitar dívidas com juros altos</li>
+                )}
+                {monthlyFixedIncome > 0 && (
+                  <li>Você tem {fmt(monthlyFixedIncome)} em receitas programadas. Isso ajuda no planejamento! 💰</li>
                 )}
                 {financialHealth >= 70 && (
                   <li>Parabéns! Sua saúde financeira está ótima. Continue assim! 🎉</li>
