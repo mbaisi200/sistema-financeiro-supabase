@@ -175,24 +175,91 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      console.log('[UPDATE USER] Iniciando atualização:', { uid, email: normalizedEmail, expiresAt });
+
+      // Verificar se o usuário existe na tabela users
+      const { data: existingUser, error: checkError } = await supabaseAdmin
+        .from('users')
+        .select('id, email, expires_at')
+        .eq('id', uid)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('[UPDATE USER] Erro ao verificar usuário:', checkError);
+        return NextResponse.json(
+          { error: 'Erro ao verificar usuário: ' + checkError.message },
+          { status: 500 }
+        );
+      }
+
+      if (!existingUser) {
+        console.error('[UPDATE USER] Usuário não encontrado na tabela users:', uid);
+        
+        // Tentar criar o registro na tabela users se não existir
+        const { data: newUser, error: insertError } = await supabaseAdmin
+          .from('users')
+          .insert({
+            id: uid,
+            email: normalizedEmail,
+            expires_at: expiresAt || null
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('[UPDATE USER] Erro ao criar registro de usuário:', insertError);
+          return NextResponse.json(
+            { error: 'Usuário não encontrado na tabela e não foi possível criar o registro: ' + insertError.message },
+            { status: 500 }
+          );
+        }
+
+        console.log('[UPDATE USER] Registro criado:', newUser);
+        return NextResponse.json({
+          success: true,
+          uid,
+          email: normalizedEmail,
+          message: 'Registro de usuário criado e data de validade definida!',
+          data: newUser
+        });
+      }
+
+      console.log('[UPDATE USER] Usuário encontrado:', existingUser);
+
       // Atualizar dados do usuário
       const updateData: { expires_at?: string | null } = {};
       if (expiresAt !== undefined) {
         updateData.expires_at = expiresAt || null;
       }
 
-      const { error: updateError } = await supabaseAdmin
+      console.log('[UPDATE USER] Dados para atualização:', updateData);
+
+      const { data: updatedData, error: updateError, count } = await supabaseAdmin
         .from('users')
         .update(updateData)
-        .eq('id', uid);
+        .eq('id', uid)
+        .select();
+
+      console.log('[UPDATE USER] Resultado da atualização:', { updatedData, updateError, count });
 
       if (updateError) {
-        console.error('Erro ao atualizar usuário:', updateError);
+        console.error('[UPDATE USER] Erro ao atualizar usuário:', updateError);
         return NextResponse.json(
-          { error: 'Erro ao atualizar usuário.' },
+          { error: 'Erro ao atualizar usuário: ' + updateError.message },
           { status: 500 }
         );
       }
+
+      // Verificar se realmente atualizou algum registro
+      if (!updatedData || updatedData.length === 0) {
+        console.error('[UPDATE USER] Nenhum registro foi atualizado para uid:', uid);
+        return NextResponse.json(
+          { error: 'Nenhum registro foi atualizado. Verifique se o usuário existe na tabela.' },
+          { status: 500 }
+        );
+      }
+
+      console.log('[UPDATE USER] Atualização realizada com sucesso:', updatedData[0]);
 
       // Se fornecer senha, atualizar via Supabase Auth
       if (password && password.length >= 6) {
@@ -205,7 +272,8 @@ export async function POST(request: NextRequest) {
         success: true,
         uid,
         email: normalizedEmail,
-        message: 'Usuário atualizado com sucesso!'
+        message: 'Usuário atualizado com sucesso!',
+        data: updatedData[0]
       });
     }
 
