@@ -14,7 +14,7 @@ interface CategoryReport {
 }
 
 export function Dashboard() {
-  const { transactions, banks, creditCardTransactions, categories, creditCards, scheduledTransactions, getBankBalance, getBankName, getBankIcon, getCategoryName, getCategoryIcon, getCardName, getCardIcon } = useFinance();
+  const { transactions, banks, creditCardTransactions, categories, creditCards, scheduledTransactions, getBankBalance, getBankName, getBankIcon, getCategoryName, getCategoryIcon, getCardName, getCardIcon, getCardTotalDebt } = useFinance();
   const [filterBank, setFilterBank] = useState('');
   const [filterPeriod, setFilterPeriod] = useState('thisMonth');
   const [categoryReport, setCategoryReport] = useState<CategoryReport | null>(null);
@@ -60,37 +60,25 @@ export function Dashboard() {
     return true;
   });
   
-  // Gastos no cartão (apenas compras, não pagamentos)
+  // ========================================
+  // CÁLCULOS DO CARTÃO DE CRÉDITO (SIMPLIFICADO)
+  // ========================================
+  // cardSpent: gastos no cartão DURANTE O PERÍODO (para gráficos)
+  // cardBalance: saldo REAL do cartão (gastos - pagamentos, todo histórico)
+  // ========================================
+  
+  // Gastos no cartão durante o período filtrado
   const cardSpent = ccFiltered.filter(t => !t.isPayment && t.value > 0).reduce((s, t) => s + t.value, 0);
   
-  // ========================================
-  // SALDO MÊS PASSADO (CORRIGIDO)
-  // ========================================
-  // Mostra apenas os GASTOS do mês anterior que ainda não foram pagos
-  // Não inclui pagamentos (que são negativos)
-  // ========================================
-  const ccLastMonthSpent = creditCardTransactions.filter(t => 
-    t.date >= lastMonthStartStr && 
-    t.date <= lastMonthEndStr &&
-    !t.isPayment && 
-    t.value > 0
-  );
-  const lastMonthSpent = ccLastMonthSpent.reduce((s, t) => s + t.value, 0);
+  // Saldo REAL de cada cartão (gastos - pagamentos de TODO o histórico)
+  const cardBalances = creditCards.map(card => ({
+    id: card.id,
+    name: card.name,
+    balance: getCardTotalDebt(card.id) // esta função já soma tudo (gastos positivos, pagamentos negativos)
+  }));
   
-  // Pagamentos feitos no mês atual que cobrem gastos do mês passado
-  const paymentsThisMonth = creditCardTransactions.filter(t => 
-    t.date >= thisMonthStr && 
-    t.date <= nowStr &&
-    t.isPayment &&
-    t.value < 0
-  );
-  const paymentsValue = Math.abs(paymentsThisMonth.reduce((s, t) => s + t.value, 0));
-  
-  // Saldo do mês passado = gastos do mês passado - pagamentos recebidos
-  const previousMonthBalance = Math.max(0, lastMonthSpent - paymentsValue);
-  
-  // Total do cartão = gastos do mês atual + saldo pendente do mês passado
-  const totalCard = cardSpent + previousMonthBalance;
+  // Saldo total de todos os cartões
+  const totalCardBalance = cardBalances.reduce((s, c) => s + c.balance, 0);
   
   // ========================================
   // SALDO ATUAL (CORRIGIDO)
@@ -415,20 +403,11 @@ export function Dashboard() {
             <div className="stat-label">CARTÃO ESTE MÊS</div>
           </div>
         </div>
-        {previousMonthBalance > 0 && (
-          <div className="stat-card orange">
-            <div className="stat-icon">📋</div>
-            <div className="stat-content">
-              <div className="stat-value">{fmt(previousMonthBalance)}</div>
-              <div className="stat-label">SALDO MÊS PASSADO</div>
-            </div>
-          </div>
-        )}
         <div className="stat-card pink">
           <div className="stat-icon">📊</div>
           <div className="stat-content">
-            <div className="stat-value">{fmt(totalCard)}</div>
-            <div className="stat-label">TOTAL CARTÃO</div>
+            <div className="stat-value">{fmt(totalCardBalance)}</div>
+            <div className="stat-label">SALDO CARTÕES</div>
           </div>
         </div>
         <div className="stat-card yellow">
