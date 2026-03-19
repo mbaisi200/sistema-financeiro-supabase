@@ -125,12 +125,6 @@ export function Dashboard() {
   });
 
   // Cálculo para gráfico Receitas x Despesas
-  // ========================================
-  // TOTAL DE DESPESAS (CORRIGIDO)
-  // ========================================
-  // Soma: despesas em débito + gastos no cartão do período
-  // NÃO inclui pagamentos de cartão (pois são transferências internas)
-  // ========================================
   const totalExpenses = expenses + cardSpent;
   const revenuePercent = income > 0 ? ((income / (income + totalExpenses)) * 100) : 0;
   const expensePercent = totalExpenses > 0 ? ((totalExpenses / (income + totalExpenses)) * 100) : 0;
@@ -138,24 +132,31 @@ export function Dashboard() {
   const savingsRate = income > 0 ? ((balance / income) * 100) : 0;
 
   // ========================================
-  // RECONCILIAÇÃO DOS VALORES DO PERÍODO
+  // COMPROMETIMENTO DA RECEITA (CORRIGIDO)
   // ========================================
-  // Verifica se os valores do período estão consistentes
+  // Comprometimento de CAIXA: % que JÁ saiu do banco
+  // Comprometimento de CARTÃO: % que vai sair (fatura pendente)
+  // Comprometimento TOTAL: soma dos dois
+  // ========================================
+  const cashCommitment = income > 0 ? (expenses / income) * 100 : 0;
+  const cardCommitment = income > 0 ? (cardSpent / income) * 100 : 0;
+  const totalCommitment = cashCommitment + cardCommitment;
+
+  // Saúde financeira baseada no comprometimento de CAIXA
+  const financialHealth = Math.max(0, Math.min(100, 100 - cashCommitment + (savingsRate > 0 ? savingsRate * 0.5 : 0)));
+
+  // ========================================
+  // RECONCILIAÇÃO DOS VALORES
+  // ========================================
+  // Verifica se os valores estão consistentes
+  // Saldo Inicial = Soma dos saldos iniciais dos bancos
+  // Saldo Atual deve ser = Saldo Inicial + Todas Receitas - Todas Despesas
   // ========================================
   const totalInitialBalance = banks.reduce((s, b) => s + b.initialBalance, 0);
-  
-  // Receitas e despesas do PERÍODO FILTRADO (não do histórico todo)
-  const periodIncome = monthTx.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0);
-  const periodExpenses = monthTx.filter(t => t.type === 'debit').reduce((s, t) => s + t.value, 0);
-  
-  // Variação do período (quanto o saldo mudou neste período)
-  const periodVariation = periodIncome - periodExpenses;
-  
-  // Saldo esperado ao final do período = Saldo Atual (que já inclui tudo)
-  // A reconciliação mostra: saldo inicial + movimentação do período = ?
-  const expectedBalance = totalInitialBalance + 
-    transactions.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0) - 
-    transactions.filter(t => t.type === 'debit').reduce((s, t) => s + t.value, 0);
+  const allTimeIncome = transactions.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0);
+  const allTimeExpenses = transactions.filter(t => t.type === 'debit').reduce((s, t) => s + t.value, 0);
+  const calculatedBalance = totalInitialBalance + allTimeIncome - allTimeExpenses;
+  const balanceDifference = totalBalance - calculatedBalance;
 
   // ========== NOVA ANÁLISE FINANCEIRA ==========
 
@@ -266,20 +267,10 @@ export function Dashboard() {
   const minimumRequired = Math.max(0, monthlyFixedExpenses + thisMonthParcels + (totalExpenses > 0 ? totalExpenses * 0.8 : 0) - totalScheduledIncome);
 
   // ============================================================
-  // COMPROMETIMENTO DA RECEITA - CÁLCULO CORRIGIDO
-  // ============================================================
   // Comprometimento = (Total de Despesas / Total de Receitas) × 100
-  // Onde:
-  // - Total de Despesas = despesas realizadas (débito + cartão)
-  // - Total de Receitas = receitas realizadas do mês
-  //
-  // NOTA: Não soma despesas programadas futuras, pois o comprometimento
-  // é uma métrica do momento ATUAL, não uma projeção futura.
+  // Usando as variáveis já calculadas acima
   // ============================================================
-  const revenueCommitment = income > 0 ? (totalExpenses / income) * 100 : 0;
-
-  // Saúde financeira (0-100)
-  const financialHealth = Math.max(0, Math.min(100, 100 - revenueCommitment + (savingsRate > 0 ? savingsRate * 0.5 : 0)));
+  const revenueCommitment = totalCommitment; // usa o comprometimento total calculado
 
   // Função para abrir relatório de categoria
   const openCategoryReport = (categoryId: string, type: 'income' | 'expense' | 'card' | 'total') => {
@@ -465,47 +456,31 @@ export function Dashboard() {
 
       {/* ========== RECONCILIAÇÃO FINANCEIRA ========== */}
       <div className="card" style={{ marginTop: '1rem', background: '#fefce8', border: '2px solid #fde047' }}>
-        <h3 style={{ marginBottom: '1rem', color: '#854d0e' }}>🔢 Reconciliação Financeira ({getPeriodLabel()})</h3>
-        
-        {/* Linha 1: Saldos */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', fontSize: '0.85rem', marginBottom: '1rem' }}>
+        <h3 style={{ marginBottom: '1rem', color: '#854d0e' }}>🔢 Reconciliação Financeira</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.85rem' }}>
           <div style={{ padding: '0.75rem', background: 'white', borderRadius: '0.5rem' }}>
             <div style={{ color: '#6b7280' }}>Saldo Inicial Total</div>
             <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{fmt(totalInitialBalance)}</div>
           </div>
           <div style={{ padding: '0.75rem', background: '#dcfce7', borderRadius: '0.5rem' }}>
-            <div style={{ color: '#166534' }}>+ Receitas do Período</div>
-            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#16a34a' }}>+{fmt(periodIncome)}</div>
+            <div style={{ color: '#166534' }}>+ Receitas (todas)</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#16a34a' }}>+{fmt(allTimeIncome)}</div>
           </div>
           <div style={{ padding: '0.75rem', background: '#fee2e2', borderRadius: '0.5rem' }}>
-            <div style={{ color: '#991b1b' }}>- Despesas do Período</div>
-            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#dc2626' }}>-{fmt(periodExpenses)}</div>
+            <div style={{ color: '#991b1b' }}>- Despesas (todas)</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#dc2626' }}>-{fmt(allTimeExpenses)}</div>
           </div>
           <div style={{ padding: '0.75rem', background: totalBalance >= 0 ? '#dbeafe' : '#fecaca', borderRadius: '0.5rem' }}>
-            <div style={{ color: '#1e40af' }}>= Saldo Atual Real</div>
-            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: totalBalance >= 0 ? '#2563eb' : '#dc2626' }}>{fmt(totalBalance)}</div>
+            <div style={{ color: '#1e40af' }}>= Saldo Calculado</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: totalBalance >= 0 ? '#2563eb' : '#dc2626' }}>{fmt(calculatedBalance)}</div>
           </div>
         </div>
-        
-        {/* Linha 2: Variação */}
-        <div style={{ padding: '0.75rem', background: 'white', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: '#6b7280' }}>
-            Variação do Período:
-          </span>
-          <span style={{ fontWeight: 'bold', color: periodVariation >= 0 ? '#16a34a' : '#dc2626', fontSize: '1.1rem' }}>
-            {periodVariation >= 0 ? '+' : ''}{fmt(periodVariation)}
-          </span>
-        </div>
-        
-        {/* Verificação de consistência */}
-        <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: '#f0fdf4', borderRadius: '0.5rem', color: '#166534', fontSize: '0.8rem' }}>
-          ✅ <strong>Verificação:</strong> Saldo Inicial ({fmt(totalInitialBalance)}) + Receitas Histórico - Despesas Histórico = {fmt(expectedBalance)}
-          {Math.abs(expectedBalance - totalBalance) < 0.01 ? (
-            <span style={{ color: '#16a34a', fontWeight: 'bold' }}> ✓ Confere!</span>
-          ) : (
-            <span style={{ color: '#dc2626', fontWeight: 'bold' }}> ⚠️ Diferença de {fmt(Math.abs(expectedBalance - totalBalance))}</span>
-          )}
-        </div>
+        {Math.abs(balanceDifference) > 0.01 && (
+          <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#fee2e2', borderRadius: '0.5rem', color: '#991b1b', fontSize: '0.85rem' }}>
+            ⚠️ <strong>Atenção:</strong> Há uma diferença de {fmt(Math.abs(balanceDifference))} entre o saldo calculado ({fmt(calculatedBalance)}) e o saldo atual ({fmt(totalBalance)}).
+            Verifique se há transações duplicadas ou saldos iniciais incorretos.
+          </div>
+        )}
       </div>
 
       {/* ========== ANÁLISE FINANCEIRA ========== */}
@@ -543,22 +518,60 @@ export function Dashboard() {
                 </div>
               </div>
 
-              {/* Comprometimento */}
+              {/* Comprometimento de Caixa */}
               <div style={{ 
                 padding: '1rem', 
-                background: revenueCommitment <= 70 ? '#f0fdf4' : revenueCommitment <= 100 ? '#fff7ed' : '#fef2f2', 
+                background: cashCommitment <= 70 ? '#f0fdf4' : cashCommitment <= 100 ? '#fff7ed' : '#fef2f2', 
                 borderRadius: '0.75rem',
-                border: `2px solid ${revenueCommitment <= 70 ? '#86efac' : revenueCommitment <= 100 ? '#fdba74' : '#fca5a5'}`
+                border: `2px solid ${cashCommitment <= 70 ? '#86efac' : cashCommitment <= 100 ? '#fdba74' : '#fca5a5'}`
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '1.5rem' }}>📈</span>
-                  <span style={{ fontWeight: 600, color: '#374151' }}>Comprometimento</span>
+                  <span style={{ fontSize: '1.5rem' }}>💵</span>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>Comp. Caixa</span>
                 </div>
-                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: revenueCommitment <= 70 ? '#22c55e' : revenueCommitment <= 100 ? '#f59e0b' : '#ef4444' }}>
-                  {revenueCommitment.toFixed(0)}%
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: cashCommitment <= 70 ? '#22c55e' : cashCommitment <= 100 ? '#f59e0b' : '#ef4444' }}>
+                  {cashCommitment.toFixed(0)}%
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                  da receita comprometida
+                  já saiu do banco
+                </div>
+              </div>
+
+              {/* Comprometimento de Cartão */}
+              <div style={{ 
+                padding: '1rem', 
+                background: '#fef3c7', 
+                borderRadius: '0.75rem',
+                border: '2px solid #fcd34d'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>💳</span>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>Comp. Cartão</span>
+                </div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#d97706' }}>
+                  {cardCommitment.toFixed(0)}%
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                  fatura pendente
+                </div>
+              </div>
+
+              {/* Comprometimento Total */}
+              <div style={{ 
+                padding: '1rem', 
+                background: totalCommitment <= 100 ? '#f0fdf4' : '#fef2f2', 
+                borderRadius: '0.75rem',
+                border: `2px solid ${totalCommitment <= 100 ? '#86efac' : '#fca5a5'}`
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>📊</span>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>Comp. Total</span>
+                </div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: totalCommitment <= 100 ? '#22c55e' : '#ef4444' }}>
+                  {totalCommitment.toFixed(0)}%
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                  caixa + cartão
                 </div>
               </div>
 
