@@ -60,13 +60,52 @@ export function Dashboard() {
     return true;
   });
   
+  // Gastos no cartão (apenas compras, não pagamentos)
   const cardSpent = ccFiltered.filter(t => !t.isPayment && t.value > 0).reduce((s, t) => s + t.value, 0);
   
-  const ccLastMonth = creditCardTransactions.filter(t => t.date >= lastMonthStartStr && t.date <= lastMonthEndStr);
-  const previousMonthBalance = Math.max(0, ccLastMonth.reduce((s, t) => s + t.value, 0));
+  // ========================================
+  // SALDO MÊS PASSADO (CORRIGIDO)
+  // ========================================
+  // Mostra apenas os GASTOS do mês anterior que ainda não foram pagos
+  // Não inclui pagamentos (que são negativos)
+  // ========================================
+  const ccLastMonthSpent = creditCardTransactions.filter(t => 
+    t.date >= lastMonthStartStr && 
+    t.date <= lastMonthEndStr &&
+    !t.isPayment && 
+    t.value > 0
+  );
+  const lastMonthSpent = ccLastMonthSpent.reduce((s, t) => s + t.value, 0);
   
+  // Pagamentos feitos no mês atual que cobrem gastos do mês passado
+  const paymentsThisMonth = creditCardTransactions.filter(t => 
+    t.date >= thisMonthStr && 
+    t.date <= nowStr &&
+    t.isPayment &&
+    t.value < 0
+  );
+  const paymentsValue = Math.abs(paymentsThisMonth.reduce((s, t) => s + t.value, 0));
+  
+  // Saldo do mês passado = gastos do mês passado - pagamentos recebidos
+  const previousMonthBalance = Math.max(0, lastMonthSpent - paymentsValue);
+  
+  // Total do cartão = gastos do mês atual + saldo pendente do mês passado
   const totalCard = cardSpent + previousMonthBalance;
+  
+  // ========================================
+  // SALDO ATUAL (CORRIGIDO)
+  // ========================================
+  // Soma o saldo de TODAS as contas bancárias
+  // Fórmula: saldoInicial + créditos - débitos de TODAS as transações
+  // ========================================
   const totalBalance = banks.reduce((s, b) => s + getBankBalance(b.id), 0);
+  
+  // ========================================
+  // FLUXO DE CAIXA DO PERÍODO (CORRIGIDO)
+  // ========================================
+  // Mostra o quanto entrou vs saiu do banco no período
+  // Fórmula: Receitas - Despesas em débito - Pagamentos de cartão
+  // ========================================
   const cashFlow = income - expenses - cardPayments;
 
   // Category breakdowns
@@ -86,11 +125,30 @@ export function Dashboard() {
   });
 
   // Cálculo para gráfico Receitas x Despesas
+  // ========================================
+  // TOTAL DE DESPESAS (CORRIGIDO)
+  // ========================================
+  // Soma: despesas em débito + gastos no cartão do período
+  // NÃO inclui pagamentos de cartão (pois são transferências internas)
+  // ========================================
   const totalExpenses = expenses + cardSpent;
   const revenuePercent = income > 0 ? ((income / (income + totalExpenses)) * 100) : 0;
   const expensePercent = totalExpenses > 0 ? ((totalExpenses / (income + totalExpenses)) * 100) : 0;
   const balance = income - totalExpenses;
   const savingsRate = income > 0 ? ((balance / income) * 100) : 0;
+
+  // ========================================
+  // RECONCILIAÇÃO DOS VALORES
+  // ========================================
+  // Verifica se os valores estão consistentes
+  // Saldo Inicial = Soma dos saldos iniciais dos bancos
+  // Saldo Atual deve ser = Saldo Inicial + Todas Receitas - Todas Despesas
+  // ========================================
+  const totalInitialBalance = banks.reduce((s, b) => s + b.initialBalance, 0);
+  const allTimeIncome = transactions.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0);
+  const allTimeExpenses = transactions.filter(t => t.type === 'debit').reduce((s, t) => s + t.value, 0);
+  const calculatedBalance = totalInitialBalance + allTimeIncome - allTimeExpenses;
+  const balanceDifference = totalBalance - calculatedBalance;
 
   // ========== NOVA ANÁLISE FINANCEIRA ==========
 
@@ -396,6 +454,35 @@ export function Dashboard() {
             <div className="stat-label">FLUXO DE CAIXA</div>
           </div>
         </div>
+      </div>
+
+      {/* ========== RECONCILIAÇÃO FINANCEIRA ========== */}
+      <div className="card" style={{ marginTop: '1rem', background: '#fefce8', border: '2px solid #fde047' }}>
+        <h3 style={{ marginBottom: '1rem', color: '#854d0e' }}>🔢 Reconciliação Financeira</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.85rem' }}>
+          <div style={{ padding: '0.75rem', background: 'white', borderRadius: '0.5rem' }}>
+            <div style={{ color: '#6b7280' }}>Saldo Inicial Total</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{fmt(totalInitialBalance)}</div>
+          </div>
+          <div style={{ padding: '0.75rem', background: '#dcfce7', borderRadius: '0.5rem' }}>
+            <div style={{ color: '#166534' }}>+ Receitas (todas)</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#16a34a' }}>+{fmt(allTimeIncome)}</div>
+          </div>
+          <div style={{ padding: '0.75rem', background: '#fee2e2', borderRadius: '0.5rem' }}>
+            <div style={{ color: '#991b1b' }}>- Despesas (todas)</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#dc2626' }}>-{fmt(allTimeExpenses)}</div>
+          </div>
+          <div style={{ padding: '0.75rem', background: totalBalance >= 0 ? '#dbeafe' : '#fecaca', borderRadius: '0.5rem' }}>
+            <div style={{ color: '#1e40af' }}>= Saldo Calculado</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: totalBalance >= 0 ? '#2563eb' : '#dc2626' }}>{fmt(calculatedBalance)}</div>
+          </div>
+        </div>
+        {Math.abs(balanceDifference) > 0.01 && (
+          <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#fee2e2', borderRadius: '0.5rem', color: '#991b1b', fontSize: '0.85rem' }}>
+            ⚠️ <strong>Atenção:</strong> Há uma diferença de {fmt(Math.abs(balanceDifference))} entre o saldo calculado ({fmt(calculatedBalance)}) e o saldo atual ({fmt(totalBalance)}).
+            Verifique se há transações duplicadas ou saldos iniciais incorretos.
+          </div>
+        )}
       </div>
 
       {/* ========== ANÁLISE FINANCEIRA ========== */}
