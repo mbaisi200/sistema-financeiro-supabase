@@ -41,6 +41,35 @@ export function Dashboard() {
     return true;
   });
 
+  // ========================================
+  // FILTRAR LANÇAMENTOS FUTUROS/AGENDADOS
+  // ========================================
+  // Inclui lançamentos pendentes do período selecionado
+  // ========================================
+  const monthScheduled = scheduledTransactions.filter(s => {
+    if (s.status !== 'pending') return false;
+    if (filterPeriod === 'thisMonth') return s.dueDate >= thisMonthStr && s.dueDate <= nowStr;
+    if (filterPeriod === 'lastMonth') return s.dueDate >= lastMonthStartStr && s.dueDate <= lastMonthEndStr;
+    return true;
+  });
+
+  // Lançamentos futuros para todo o mês atual (incluindo dias futuros)
+  const thisMonthScheduled = scheduledTransactions.filter(s => {
+    if (s.status !== 'pending') return false;
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    return s.dueDate >= thisMonthStr && s.dueDate <= monthEnd;
+  });
+
+  // Separar lançamentos agendados por tipo
+  const scheduledDebitExpenses = monthScheduled.filter(s => s.transactionType !== 'credit' && s.bank);
+  const scheduledCreditIncome = monthScheduled.filter(s => s.transactionType === 'credit' && s.bank);
+  const scheduledCardExpenses = monthScheduled.filter(s => s.card);
+
+  // Valores de lançamentos agendados
+  const scheduledDebitExpensesTotal = scheduledDebitExpenses.reduce((s, t) => s + t.value, 0);
+  const scheduledCreditIncomeTotal = scheduledCreditIncome.reduce((s, t) => s + t.value, 0);
+  const scheduledCardExpensesTotal = scheduledCardExpenses.reduce((s, t) => s + t.value, 0);
+
   // Encontrar ID da categoria PAGAMENTO CARTÃO
   const pagamentoCartaoCategoryIds = [
     ...categories
@@ -49,9 +78,16 @@ export function Dashboard() {
     'pagamento_cartao'
   ];
 
+  // ========================================
+  // RECEITAS E DESPESAS (INCLUINDO LANÇAMENTOS AGENDADOS)
+  // ========================================
   const income = monthTx.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0);
   const expenses = monthTx.filter(t => t.type === 'debit' && !pagamentoCartaoCategoryIds.includes(t.category)).reduce((s, t) => s + t.value, 0);
   const cardPayments = monthTx.filter(t => pagamentoCartaoCategoryIds.includes(t.category)).reduce((s, t) => s + t.value, 0);
+
+  // Totais INCLUINDO lançamentos agendados
+  const totalIncomeWithScheduled = income + scheduledCreditIncomeTotal;
+  const totalExpensesWithScheduled = expenses + scheduledDebitExpensesTotal;
   
   // Filter credit card transactions by period
   const ccFiltered = creditCardTransactions.filter(t => {
@@ -59,16 +95,19 @@ export function Dashboard() {
     if (filterPeriod === 'lastMonth') return t.date >= lastMonthStartStr && t.date <= lastMonthEndStr;
     return true;
   });
-  
+
   // ========================================
   // CÁLCULOS DO CARTÃO DE CRÉDITO (SIMPLIFICADO)
   // ========================================
   // cardSpent: gastos no cartão DURANTE O PERÍODO (para gráficos)
   // cardBalance: saldo REAL do cartão (gastos - pagamentos, todo histórico)
   // ========================================
-  
+
   // Gastos no cartão durante o período filtrado
   const cardSpent = ccFiltered.filter(t => !t.isPayment && t.value > 0).reduce((s, t) => s + t.value, 0);
+
+  // Gastos no cartão INCLUINDO lançamentos agendados
+  const cardSpentWithScheduled = cardSpent + scheduledCardExpensesTotal;
   
   // Saldo REAL de cada cartão (gastos - pagamentos de TODO o histórico)
   const cardBalances = creditCards.map(card => ({
@@ -96,42 +135,66 @@ export function Dashboard() {
   // ========================================
   const cashFlow = income - expenses - cardPayments;
 
-  // Category breakdowns
+  // Category breakdowns (INCLUINDO lançamentos agendados)
   const expensesByCategory: Record<string, number> = {};
   monthTx.filter(t => t.type === 'debit' && !pagamentoCartaoCategoryIds.includes(t.category)).forEach(t => {
     expensesByCategory[t.category] = (expensesByCategory[t.category] || 0) + t.value;
+  });
+  // Adicionar despesas agendadas por categoria
+  scheduledDebitExpenses.forEach(t => {
+    if (t.category) {
+      expensesByCategory[t.category] = (expensesByCategory[t.category] || 0) + t.value;
+    }
   });
 
   const incomeByCategory: Record<string, number> = {};
   monthTx.filter(t => t.type === 'credit').forEach(t => {
     incomeByCategory[t.category] = (incomeByCategory[t.category] || 0) + t.value;
   });
+  // Adicionar receitas agendadas por categoria
+  scheduledCreditIncome.forEach(t => {
+    if (t.category) {
+      incomeByCategory[t.category] = (incomeByCategory[t.category] || 0) + t.value;
+    }
+  });
 
   const cardByCategory: Record<string, number> = {};
   ccFiltered.filter(t => !t.isPayment && t.value > 0).forEach(t => {
     cardByCategory[t.category] = (cardByCategory[t.category] || 0) + t.value;
   });
+  // Adicionar gastos de cartão agendados por categoria
+  scheduledCardExpenses.forEach(t => {
+    if (t.category) {
+      cardByCategory[t.category] = (cardByCategory[t.category] || 0) + t.value;
+    }
+  });
 
-  // Cálculo para gráfico Receitas x Despesas
-  const totalExpenses = expenses + cardSpent;
-  const revenuePercent = income > 0 ? ((income / (income + totalExpenses)) * 100) : 0;
-  const expensePercent = totalExpenses > 0 ? ((totalExpenses / (income + totalExpenses)) * 100) : 0;
-  const balance = income - totalExpenses;
-  const savingsRate = income > 0 ? ((balance / income) * 100) : 0;
+  // Cálculo para gráfico Receitas x Despesas (INCLUINDO AGENDADOS)
+  const totalExpenses = totalExpensesWithScheduled + cardSpentWithScheduled;
+  const revenuePercent = totalIncomeWithScheduled > 0 ? ((totalIncomeWithScheduled / (totalIncomeWithScheduled + totalExpenses)) * 100) : 0;
+  const expensePercent = totalExpenses > 0 ? ((totalExpenses / (totalIncomeWithScheduled + totalExpenses)) * 100) : 0;
+  const balance = totalIncomeWithScheduled - totalExpenses;
+  const savingsRate = totalIncomeWithScheduled > 0 ? ((balance / totalIncomeWithScheduled) * 100) : 0;
 
   // ========================================
   // COMPROMETIMENTO DA RECEITA (CORRIGIDO)
   // ========================================
-  // Comprometimento de CAIXA: % que JÁ saiu do banco (despesas em débito)
+  // Comprometimento de CAIXA: % que JÁ saiu do banco + agendado (despesas em débito)
   // Comprometimento de CARTÃO: % da fatura pendente (saldo atual do cartão)
   // Comprometimento TOTAL: soma dos dois
   // ========================================
-  const cashCommitment = income > 0 ? (expenses / income) * 100 : 0;
-  const cardCommitment = income > 0 ? (totalCardBalance / income) * 100 : 0;
+  const cashCommitment = totalIncomeWithScheduled > 0 ? (totalExpensesWithScheduled / totalIncomeWithScheduled) * 100 : 0;
+  const cardCommitment = totalIncomeWithScheduled > 0 ? (totalCardBalance / totalIncomeWithScheduled) * 100 : 0;
   const totalCommitment = cashCommitment + cardCommitment;
 
   // Saúde financeira baseada no comprometimento de CAIXA
   const financialHealth = Math.max(0, Math.min(100, 100 - cashCommitment + (savingsRate > 0 ? savingsRate * 0.5 : 0)));
+
+  // Contadores de lançamentos para exibição
+  const scheduledCount = monthScheduled.length;
+  const scheduledDebitCount = scheduledDebitExpenses.length;
+  const scheduledCreditCount = scheduledCreditIncome.length;
+  const scheduledCardCount = scheduledCardExpenses.length;
 
   // ========================================
   // RECONCILIAÇÃO DOS VALORES DO PERÍODO
@@ -139,13 +202,18 @@ export function Dashboard() {
   // Usa os valores FILTRADOS pelo período selecionado
   // ========================================
   const totalInitialBalance = banks.reduce((s, b) => s + b.initialBalance, 0);
-  
-  // Receitas e despesas DO PERÍODO (não do histórico todo)
-  const periodIncome = income; // já está filtrado
-  const periodExpenses = expenses + cardPayments; // despesas + pagamentos de cartão do período
-  
+
+  // Receitas e despesas DO PERÍODO (incluindo lançamentos agendados)
+  const periodIncome = totalIncomeWithScheduled; // receitas realizadas + agendadas
+  const periodExpenses = totalExpensesWithScheduled + cardPayments; // despesas + pagamentos de cartão
+
   // Variação do período
   const periodVariation = periodIncome - periodExpenses;
+
+  // Totais para exibição (realizadas + agendadas)
+  const displayIncome = totalIncomeWithScheduled;
+  const displayExpenses = totalExpensesWithScheduled;
+  const displayCardSpent = cardSpentWithScheduled;
   
   // Verificação de consistência (usa TODO o histórico para validar o saldo atual)
   const allTimeIncome = transactions.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0);
@@ -391,22 +459,22 @@ export function Dashboard() {
         <div className="stat-card green">
           <div className="stat-icon">💰</div>
           <div className="stat-content">
-            <div className="stat-value">{fmt(income)}</div>
-            <div className="stat-label">RECEITAS</div>
+            <div className="stat-value">{fmt(displayIncome)}</div>
+            <div className="stat-label">RECEITAS {scheduledCreditCount > 0 && <span style={{fontSize: '0.7rem', color: '#059669'}}>({scheduledCreditCount} prog.)</span>}</div>
           </div>
         </div>
         <div className="stat-card red">
           <div className="stat-icon">💸</div>
           <div className="stat-content">
-            <div className="stat-value">{fmt(expenses)}</div>
-            <div className="stat-label">DESPESAS</div>
+            <div className="stat-value">{fmt(displayExpenses)}</div>
+            <div className="stat-label">DESPESAS {scheduledDebitCount > 0 && <span style={{fontSize: '0.7rem', color: '#dc2626'}}>({scheduledDebitCount} prog.)</span>}</div>
           </div>
         </div>
         <div className="stat-card purple">
           <div className="stat-icon">💳</div>
           <div className="stat-content">
-            <div className="stat-value">{fmt(cardSpent)}</div>
-            <div className="stat-label">CARTÃO ESTE MÊS</div>
+            <div className="stat-value">{fmt(displayCardSpent)}</div>
+            <div className="stat-label">CARTÃO {scheduledCardCount > 0 && <span style={{fontSize: '0.7rem', color: '#7c3aed'}}>({scheduledCardCount} prog.)</span>}</div>
           </div>
         </div>
         <div className="stat-card pink">
@@ -444,12 +512,18 @@ export function Dashboard() {
         <h3 style={{ marginBottom: '1rem', color: '#854d0e' }}>🔢 Resumo do Período</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', fontSize: '0.85rem' }}>
           <div style={{ padding: '0.75rem', background: '#dcfce7', borderRadius: '0.5rem' }}>
-            <div style={{ color: '#166534' }}>+ Receitas</div>
+            <div style={{ color: '#166534' }}>+ Receitas {scheduledCreditCount > 0 && <span style={{fontSize: '0.7rem'}}>(realiz.+prog.)</span>}</div>
             <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#16a34a' }}>+{fmt(periodIncome)}</div>
+            {scheduledCreditIncomeTotal > 0 && (
+              <div style={{ fontSize: '0.7rem', color: '#059669' }}>Prog: +{fmt(scheduledCreditIncomeTotal)}</div>
+            )}
           </div>
           <div style={{ padding: '0.75rem', background: '#fee2e2', borderRadius: '0.5rem' }}>
-            <div style={{ color: '#991b1b' }}>- Despesas (débito)</div>
-            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#dc2626' }}>-{fmt(expenses)}</div>
+            <div style={{ color: '#991b1b' }}>- Despesas (débito) {scheduledDebitCount > 0 && <span style={{fontSize: '0.7rem'}}>(realiz.+prog.)</span>}</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#dc2626' }}>-{fmt(displayExpenses)}</div>
+            {scheduledDebitExpensesTotal > 0 && (
+              <div style={{ fontSize: '0.7rem', color: '#b91c1c' }}>Prog: -{fmt(scheduledDebitExpensesTotal)}</div>
+            )}
           </div>
           <div style={{ padding: '0.75rem', background: '#fef3c7', borderRadius: '0.5rem' }}>
             <div style={{ color: '#92400e' }}>- Pagamentos Cartão</div>
@@ -462,6 +536,27 @@ export function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Detalhamento de Lançamentos Programados */}
+        {scheduledCount > 0 && (
+          <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#f0f9ff', borderRadius: '0.5rem', border: '1px solid #bae6fd' }}>
+            <div style={{ fontWeight: '600', color: '#0369a1', marginBottom: '0.5rem' }}>
+              📅 Lançamentos Programados no Período: {scheduledCount}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', fontSize: '0.8rem' }}>
+              {scheduledCreditCount > 0 && (
+                <div style={{ color: '#059669' }}>💰 Receitas: {scheduledCreditCount} (+{fmt(scheduledCreditIncomeTotal)})</div>
+              )}
+              {scheduledDebitCount > 0 && (
+                <div style={{ color: '#dc2626' }}>💸 Despesas: {scheduledDebitCount} (-{fmt(scheduledDebitExpensesTotal)})</div>
+              )}
+              {scheduledCardCount > 0 && (
+                <div style={{ color: '#7c3aed' }}>💳 Cartão: {scheduledCardCount} (-{fmt(scheduledCardExpensesTotal)})</div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'white', borderRadius: '0.5rem', fontSize: '0.85rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ color: '#6b7280' }}>Saldo Atual das Contas:</span>
