@@ -122,29 +122,35 @@ export function Dashboard() {
   // ========================================
   // COMPROMETIMENTO DA RECEITA (CORRIGIDO)
   // ========================================
-  // Comprometimento de CAIXA: % que JÁ saiu do banco
-  // Comprometimento de CARTÃO: % que vai sair (fatura pendente)
+  // Comprometimento de CAIXA: % que JÁ saiu do banco (despesas em débito)
+  // Comprometimento de CARTÃO: % da fatura pendente (saldo atual do cartão)
   // Comprometimento TOTAL: soma dos dois
   // ========================================
   const cashCommitment = income > 0 ? (expenses / income) * 100 : 0;
-  const cardCommitment = income > 0 ? (cardSpent / income) * 100 : 0;
+  const cardCommitment = income > 0 ? (totalCardBalance / income) * 100 : 0;
   const totalCommitment = cashCommitment + cardCommitment;
 
   // Saúde financeira baseada no comprometimento de CAIXA
   const financialHealth = Math.max(0, Math.min(100, 100 - cashCommitment + (savingsRate > 0 ? savingsRate * 0.5 : 0)));
 
   // ========================================
-  // RECONCILIAÇÃO DOS VALORES
+  // RECONCILIAÇÃO DOS VALORES DO PERÍODO
   // ========================================
-  // Verifica se os valores estão consistentes
-  // Saldo Inicial = Soma dos saldos iniciais dos bancos
-  // Saldo Atual deve ser = Saldo Inicial + Todas Receitas - Todas Despesas
+  // Usa os valores FILTRADOS pelo período selecionado
   // ========================================
   const totalInitialBalance = banks.reduce((s, b) => s + b.initialBalance, 0);
+  
+  // Receitas e despesas DO PERÍODO (não do histórico todo)
+  const periodIncome = income; // já está filtrado
+  const periodExpenses = expenses + cardPayments; // despesas + pagamentos de cartão do período
+  
+  // Variação do período
+  const periodVariation = periodIncome - periodExpenses;
+  
+  // Verificação de consistência (usa TODO o histórico para validar o saldo atual)
   const allTimeIncome = transactions.filter(t => t.type === 'credit').reduce((s, t) => s + t.value, 0);
   const allTimeExpenses = transactions.filter(t => t.type === 'debit').reduce((s, t) => s + t.value, 0);
   const calculatedBalance = totalInitialBalance + allTimeIncome - allTimeExpenses;
-  const balanceDifference = totalBalance - calculatedBalance;
 
   // ========== NOVA ANÁLISE FINANCEIRA ==========
 
@@ -435,31 +441,37 @@ export function Dashboard() {
 
       {/* ========== RECONCILIAÇÃO FINANCEIRA ========== */}
       <div className="card" style={{ marginTop: '1rem', background: '#fefce8', border: '2px solid #fde047' }}>
-        <h3 style={{ marginBottom: '1rem', color: '#854d0e' }}>🔢 Reconciliação Financeira</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.85rem' }}>
-          <div style={{ padding: '0.75rem', background: 'white', borderRadius: '0.5rem' }}>
-            <div style={{ color: '#6b7280' }}>Saldo Inicial Total</div>
-            <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{fmt(totalInitialBalance)}</div>
-          </div>
+        <h3 style={{ marginBottom: '1rem', color: '#854d0e' }}>🔢 Resumo do Período</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', fontSize: '0.85rem' }}>
           <div style={{ padding: '0.75rem', background: '#dcfce7', borderRadius: '0.5rem' }}>
-            <div style={{ color: '#166534' }}>+ Receitas (todas)</div>
-            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#16a34a' }}>+{fmt(allTimeIncome)}</div>
+            <div style={{ color: '#166534' }}>+ Receitas</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#16a34a' }}>+{fmt(periodIncome)}</div>
           </div>
           <div style={{ padding: '0.75rem', background: '#fee2e2', borderRadius: '0.5rem' }}>
-            <div style={{ color: '#991b1b' }}>- Despesas (todas)</div>
-            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#dc2626' }}>-{fmt(allTimeExpenses)}</div>
+            <div style={{ color: '#991b1b' }}>- Despesas (débito)</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#dc2626' }}>-{fmt(expenses)}</div>
           </div>
-          <div style={{ padding: '0.75rem', background: totalBalance >= 0 ? '#dbeafe' : '#fecaca', borderRadius: '0.5rem' }}>
-            <div style={{ color: '#1e40af' }}>= Saldo Calculado</div>
-            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: totalBalance >= 0 ? '#2563eb' : '#dc2626' }}>{fmt(calculatedBalance)}</div>
+          <div style={{ padding: '0.75rem', background: '#fef3c7', borderRadius: '0.5rem' }}>
+            <div style={{ color: '#92400e' }}>- Pagamentos Cartão</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#d97706' }}>-{fmt(cardPayments)}</div>
+          </div>
+          <div style={{ padding: '0.75rem', background: periodVariation >= 0 ? '#dbeafe' : '#fecaca', borderRadius: '0.5rem' }}>
+            <div style={{ color: periodVariation >= 0 ? '#1e40af' : '#991b1b' }}>= Variação</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: periodVariation >= 0 ? '#2563eb' : '#dc2626' }}>
+              {periodVariation >= 0 ? '+' : ''}{fmt(periodVariation)}
+            </div>
           </div>
         </div>
-        {Math.abs(balanceDifference) > 0.01 && (
-          <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#fee2e2', borderRadius: '0.5rem', color: '#991b1b', fontSize: '0.85rem' }}>
-            ⚠️ <strong>Atenção:</strong> Há uma diferença de {fmt(Math.abs(balanceDifference))} entre o saldo calculado ({fmt(calculatedBalance)}) e o saldo atual ({fmt(totalBalance)}).
-            Verifique se há transações duplicadas ou saldos iniciais incorretos.
+        <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'white', borderRadius: '0.5rem', fontSize: '0.85rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#6b7280' }}>Saldo Atual das Contas:</span>
+            <span style={{ fontWeight: 'bold', color: totalBalance >= 0 ? '#22c55e' : '#ef4444', fontSize: '1.1rem' }}>{fmt(totalBalance)}</span>
           </div>
-        )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
+            <span style={{ color: '#6b7280' }}>Dívida no Cartão:</span>
+            <span style={{ fontWeight: 'bold', color: '#d97706', fontSize: '1.1rem' }}>{fmt(totalCardBalance)}</span>
+          </div>
+        </div>
       </div>
 
       {/* ========== ANÁLISE FINANCEIRA ========== */}
