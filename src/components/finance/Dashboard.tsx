@@ -44,26 +44,44 @@ export function Dashboard() {
   // ========================================
   // FILTRAR LANÇAMENTOS FUTUROS/AGENDADOS
   // ========================================
-  // Inclui lançamentos pendentes do período selecionado
+  // Inclui lançamentos pendentes do MÊS COMPLETO (incluindo dias futuros)
   // ========================================
+  const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+  // Lançamentos futuros do mês atual (TODOS os dias do mês, incluindo futuros)
   const monthScheduled = scheduledTransactions.filter(s => {
     if (s.status !== 'pending') return false;
-    if (filterPeriod === 'thisMonth') return s.dueDate >= thisMonthStr && s.dueDate <= nowStr;
+    // Para lançamentos futuros, usar o MÊS COMPLETO, não só até hoje
+    if (filterPeriod === 'thisMonth') return s.dueDate >= thisMonthStr && s.dueDate <= thisMonthEnd;
     if (filterPeriod === 'lastMonth') return s.dueDate >= lastMonthStartStr && s.dueDate <= lastMonthEndStr;
     return true;
   });
 
-  // Lançamentos futuros para todo o mês atual (incluindo dias futuros)
-  const thisMonthScheduled = scheduledTransactions.filter(s => {
-    if (s.status !== 'pending') return false;
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-    return s.dueDate >= thisMonthStr && s.dueDate <= monthEnd;
+  // Separar lançamentos agendados por tipo
+  // Despesas: transactionType === 'debit' (ou não é credit) com banco definido
+  // Receitas: transactionType === 'credit' com banco definido
+  // Cartão: tem card definido (independente do transactionType)
+  const scheduledDebitExpenses = monthScheduled.filter(s => {
+    // Despesa em débito: não é receita (credit) e tem banco
+    return s.transactionType !== 'credit' && s.bank && s.bank.trim() !== '';
+  });
+  const scheduledCreditIncome = monthScheduled.filter(s => {
+    // Receita: é credit e tem banco
+    return s.transactionType === 'credit' && s.bank && s.bank.trim() !== '';
+  });
+  const scheduledCardExpenses = monthScheduled.filter(s => {
+    // Gasto no cartão: tem cartão definido
+    return s.card && s.card.trim() !== '';
   });
 
-  // Separar lançamentos agendados por tipo
-  const scheduledDebitExpenses = monthScheduled.filter(s => s.transactionType !== 'credit' && s.bank);
-  const scheduledCreditIncome = monthScheduled.filter(s => s.transactionType === 'credit' && s.bank);
-  const scheduledCardExpenses = monthScheduled.filter(s => s.card);
+  // Debug: mostrar quantidade de lançamentos encontrados
+  const scheduledDebug = {
+    total: monthScheduled.length,
+    debitos: scheduledDebitExpenses.length,
+    creditos: scheduledCreditIncome.length,
+    cartoes: scheduledCardExpenses.length
+  };
+  console.log('Lançamentos agendados:', scheduledDebug);
 
   // Valores de lançamentos agendados
   const scheduledDebitExpensesTotal = scheduledDebitExpenses.reduce((s, t) => s + t.value, 0);
