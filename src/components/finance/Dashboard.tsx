@@ -161,23 +161,30 @@ export function Dashboard() {
 
   const averageIncome = getAverageIncome();
 
-  // Despesas fixas mensais (recorrentes) - apenas débitos
+  // Despesas fixas mensais (recorrentes) - apenas do mês atual
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
   const monthlyFixedExpenses = scheduledTransactions
-    .filter(s => s.status === 'pending' && s.type === 'recurring' && s.transactionType !== 'credit')
+    .filter(s => {
+      if (s.status !== 'pending' || s.type !== 'recurring' || s.transactionType === 'credit') return false;
+      return s.dueDate >= currentMonthStart && s.dueDate <= currentMonthEnd;
+    })
     .reduce((sum, s) => sum + s.value, 0);
 
-  // Receitas fixas mensais (recorrentes) - apenas créditos
+  // Receitas fixas mensais (recorrentes) - apenas do mês atual
   const monthlyFixedIncome = scheduledTransactions
-    .filter(s => s.status === 'pending' && s.type === 'recurring' && s.transactionType === 'credit')
+    .filter(s => {
+      if (s.status !== 'pending' || s.type !== 'recurring' || s.transactionType !== 'credit') return false;
+      return s.dueDate >= currentMonthStart && s.dueDate <= currentMonthEnd;
+    })
     .reduce((sum, s) => sum + s.value, 0);
 
   // Parcelas de despesas deste mês
   const thisMonthParcels = scheduledTransactions
     .filter(s => {
       if (s.status !== 'pending' || s.type !== 'parcel' || s.transactionType === 'credit') return false;
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-      return s.dueDate >= monthStart && s.dueDate <= monthEnd;
+      return s.dueDate >= currentMonthStart && s.dueDate <= currentMonthEnd;
     })
     .reduce((sum, s) => sum + s.value, 0);
 
@@ -185,9 +192,7 @@ export function Dashboard() {
   const thisMonthParcelsIncome = scheduledTransactions
     .filter(s => {
       if (s.status !== 'pending' || s.type !== 'parcel' || s.transactionType !== 'credit') return false;
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-      return s.dueDate >= monthStart && s.dueDate <= monthEnd;
+      return s.dueDate >= currentMonthStart && s.dueDate <= currentMonthEnd;
     })
     .reduce((sum, s) => sum + s.value, 0);
 
@@ -195,10 +200,18 @@ export function Dashboard() {
   const totalScheduledIncome = monthlyFixedIncome + thisMonthParcelsIncome;
   const minimumRequired = Math.max(0, monthlyFixedExpenses + thisMonthParcels + (totalExpenses > 0 ? totalExpenses * 0.8 : 0) - totalScheduledIncome);
 
-  // Comprometimento da receita (considerando receitas programadas)
-  const totalScheduledExpenses = monthlyFixedExpenses + thisMonthParcels;
-  const effectiveIncome = averageIncome + monthlyFixedIncome + thisMonthParcelsIncome;
-  const revenueCommitment = effectiveIncome > 0 ? ((totalExpenses + totalScheduledExpenses) / effectiveIncome) * 100 : 0;
+  // ============================================================
+  // COMPROMETIMENTO DA RECEITA - CÁLCULO CORRIGIDO
+  // ============================================================
+  // Comprometimento = (Total de Despesas / Total de Receitas) × 100
+  // Onde:
+  // - Total de Despesas = despesas realizadas (débito + cartão)
+  // - Total de Receitas = receitas realizadas do mês
+  //
+  // NOTA: Não soma despesas programadas futuras, pois o comprometimento
+  // é uma métrica do momento ATUAL, não uma projeção futura.
+  // ============================================================
+  const revenueCommitment = income > 0 ? (totalExpenses / income) * 100 : 0;
 
   // Saúde financeira (0-100)
   const financialHealth = Math.max(0, Math.min(100, 100 - revenueCommitment + (savingsRate > 0 ? savingsRate * 0.5 : 0)));

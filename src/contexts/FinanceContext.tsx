@@ -697,9 +697,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteCreditCardTransaction = async (id: string) => {
-    if (!user) return;
+    if (!user) throw new Error('Usuário não está logado');
+    
     const { error } = await supabase.from('credit_card_transactions').delete().eq('id', id);
-    if (error) throw error;
+    
+    if (error) {
+      console.error('Erro ao excluir transação do cartão:', error);
+      throw new Error(error.message || 'Erro ao excluir transação');
+    }
+    
     setCreditCardTransactions(prev => prev.filter(t => t.id !== id));
   };
 

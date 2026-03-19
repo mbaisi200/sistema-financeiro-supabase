@@ -67,9 +67,20 @@ export function CreditCards({ showNotification }: { showNotification: (msg: stri
   };
 
   const handleDeletePurchase = async (id: string) => {
-    if (confirm('Excluir compra?')) {
-      await deleteCreditCardTransaction(id);
-      showNotification('Excluída!', 'success');
+    console.log('Tentando excluir transação ID:', id);
+    
+    if (confirm('Excluir esta transação do cartão?')) {
+      try {
+        console.log('Confirmado. Chamando deleteCreditCardTransaction...');
+        await deleteCreditCardTransaction(id);
+        console.log('Exclusão realizada com sucesso!');
+        showNotification('Transação excluída com sucesso!', 'success');
+      } catch (error: any) {
+        console.error('Erro ao excluir transação:', error);
+        showNotification(`Erro ao excluir: ${error?.message || 'Erro desconhecido'}`, 'error');
+      }
+    } else {
+      console.log('Exclusão cancelada pelo usuário');
     }
   };
 
