@@ -514,7 +514,14 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
 
       {/* Lista de Lançamentos */}
       <div className="card">
-        <h3 style={{ marginBottom: '1rem' }}>📋 Lançamentos Futuros</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h3 style={{ margin: 0 }}>📋 Lançamentos Futuros</h3>
+          <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', color: '#6b7280' }}>
+            <span>✅ Confirmar</span>
+            <span>✏️ Editar</span>
+            <span>🗑️ Excluir</span>
+          </div>
+        </div>
 
         {Object.keys(groupedByMonth).length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
@@ -590,32 +597,47 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
                           {s.transactionType === 'credit' ? '+' : '-'}{fmt(s.value)}
                         </td>
                         <td>
-                          <div style={{ display: 'flex', gap: '0.25rem' }}>
-                            {(s.dueDate <= today) && (
-                              <button
-                                className="btn btn-sm"
-                                style={{ background: '#22c55e', color: 'white' }}
-                                onClick={() => setConfirmModal({
-                                  scheduled: s,
-                                  confirmedValue: s.value.toString(),
-                                  confirmedDate: today
-                                })}
-                                title="Confirmar pagamento"
-                              >
-                                ✅
-                              </button>
-                            )}
+                          <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'nowrap' }}>
                             <button
-                              className="btn btn-sm btn-secondary"
+                              className="btn btn-sm"
+                              style={{ 
+                                background: s.dueDate <= today ? '#22c55e' : '#3b82f6', 
+                                color: 'white',
+                                minWidth: '36px',
+                                padding: '0.5rem'
+                              }}
+                              onClick={() => setConfirmModal({
+                                scheduled: s,
+                                confirmedValue: s.value.toString(),
+                                confirmedDate: s.dueDate <= today ? today : s.dueDate
+                              })}
+                              title={s.dueDate <= today ? "Confirmar pagamento (vencido/hoje)" : "Confirmar pagamento antecipado"}
+                            >
+                              ✅
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              style={{ 
+                                background: '#f59e0b', 
+                                color: 'white',
+                                minWidth: '36px',
+                                padding: '0.5rem'
+                              }}
                               onClick={() => setEditModal(s)}
-                              title="Editar"
+                              title="Editar lançamento"
                             >
                               ✏️
                             </button>
                             <button
-                              className="btn btn-sm btn-danger"
+                              className="btn btn-sm"
+                              style={{ 
+                                background: '#ef4444', 
+                                color: 'white',
+                                minWidth: '36px',
+                                padding: '0.5rem'
+                              }}
                               onClick={() => handleDelete(s.id, s.description)}
-                              title="Excluir"
+                              title="Excluir lançamento"
                             >
                               🗑️
                             </button>
@@ -655,24 +677,56 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
           }}>
             <h3 style={{ marginBottom: '1rem' }}>✅ Confirmar Lançamento</h3>
             
+            {/* Status do lançamento */}
+            {confirmModal.scheduled.dueDate > today && (
+              <div style={{ 
+                background: '#fef3c7', 
+                border: '1px solid #f59e0b',
+                padding: '0.75rem', 
+                borderRadius: '0.5rem', 
+                marginBottom: '1rem',
+                fontSize: '0.9rem'
+              }}>
+                ⚠️ <strong>Atenção:</strong> Este lançamento ainda não venceu. 
+                Você está confirmando antecipadamente.
+              </div>
+            )}
+            
+            {confirmModal.scheduled.dueDate < today && (
+              <div style={{ 
+                background: '#fee2e2', 
+                border: '1px solid #ef4444',
+                padding: '0.75rem', 
+                borderRadius: '0.5rem', 
+                marginBottom: '1rem',
+                fontSize: '0.9rem'
+              }}>
+                ⚠️ <strong>Atenção:</strong> Este lançamento está vencido há {Math.ceil((new Date(today).getTime() - new Date(confirmModal.scheduled.dueDate).getTime()) / (1000 * 60 * 60 * 24))} dia(s).
+              </div>
+            )}
+
             <div style={{ background: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1rem' }}>
               <p style={{ margin: '0 0 0.5rem 0' }}><strong>{confirmModal.scheduled.description}</strong></p>
               <p style={{ margin: 0, fontSize: '0.85rem', color: '#6b7280' }}>
                 Vencimento: {fmtDate(confirmModal.scheduled.dueDate)}
               </p>
+              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1.1rem', fontWeight: 600, color: confirmModal.scheduled.transactionType === 'credit' ? '#22c55e' : '#ef4444' }}>
+                Valor: {confirmModal.scheduled.transactionType === 'credit' ? '+' : '-'}{fmt(confirmModal.scheduled.value)}
+              </p>
             </div>
 
             <div className="form-group">
-              <label className="form-label">Valor Confirmado</label>
+              <label className="form-label">Valor Confirmado (R$)</label>
               <input
                 type="number"
                 step="0.01"
                 className="form-input"
                 value={confirmModal.confirmedValue}
                 onChange={e => setConfirmModal({ ...confirmModal, confirmedValue: e.target.value })}
+                style={{ fontSize: '1.1rem', fontWeight: 600 }}
               />
               <small style={{ color: '#6b7280' }}>
-                Ajuste o valor se necessário (ex: juros, multas)
+                Ajuste o valor se necessário (ex: juros, multas, descontos)
               </small>
             </div>
 
@@ -686,9 +740,24 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
               />
             </div>
 
+            <div style={{ 
+              background: '#f0fdf4', 
+              border: '1px solid #22c55e', 
+              padding: '0.75rem', 
+              borderRadius: '0.5rem', 
+              marginBottom: '1rem',
+              fontSize: '0.85rem'
+            }}>
+              💡 Ao confirmar, este lançamento será movido para a aba <strong>"Transações"</strong> e o saldo será atualizado.
+            </div>
+
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-              <button className="btn btn-primary" onClick={handleConfirm}>
-                ✅ Confirmar
+              <button 
+                className="btn" 
+                style={{ background: '#22c55e', color: 'white', flex: 1 }} 
+                onClick={handleConfirm}
+              >
+                ✅ Confirmar e Mover para Transações
               </button>
               <button
                 className="btn"
@@ -721,8 +790,10 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
             background: 'white',
             padding: '2rem',
             borderRadius: '0.75rem',
-            maxWidth: '450px',
-            width: '100%'
+            maxWidth: '500px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto'
           }}>
             <h3 style={{ marginBottom: '1rem' }}>✏️ Editar Lançamento</h3>
 
@@ -737,7 +808,7 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
             </div>
 
             <div className="form-group">
-              <label className="form-label">Valor</label>
+              <label className="form-label">Valor (R$)</label>
               <input
                 type="number"
                 step="0.01"
@@ -757,9 +828,47 @@ CREATE POLICY "Users can manage own scheduled transactions" ON scheduled_transac
               />
             </div>
 
+            <div className="form-group">
+              <label className="form-label">Categoria</label>
+              <SearchableSelect
+                options={categories.map(c => ({ id: c.id, icon: c.icon, name: c.name }))}
+                value={editModal.category || ''}
+                onChange={(val) => setEditModal({ ...editModal, category: val })}
+                placeholder="Buscar categoria..."
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Banco</label>
+              <select
+                className="form-select"
+                value={editModal.bank || ''}
+                onChange={e => setEditModal({ ...editModal, bank: e.target.value, card: '' })}
+              >
+                <option value="">Selecione (opcional)</option>
+                {banks.map(b => (
+                  <option key={b.id} value={b.id}>{b.icon} {b.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Cartão de Crédito</label>
+              <select
+                className="form-select"
+                value={editModal.card || ''}
+                onChange={e => setEditModal({ ...editModal, card: e.target.value, bank: '' })}
+              >
+                <option value="">Selecione (opcional)</option>
+                {creditCards.map(c => (
+                  <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                ))}
+              </select>
+            </div>
+
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
               <button className="btn btn-primary" onClick={handleEdit}>
-                💾 Salvar
+                💾 Salvar Alterações
               </button>
               <button
                 className="btn"
