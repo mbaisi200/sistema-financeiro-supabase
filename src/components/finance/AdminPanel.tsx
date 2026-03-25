@@ -80,6 +80,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
 
       console.log('[AdminPanel] Lista processada:', usersList);
       setUsers(usersList.sort((a, b) => a.email.localeCompare(b.email)));
+      console.log('[AdminPanel] setUsers chamado com', usersList.length, 'usuários');
 
       const pendingList: PendingUser[] = (data.pendingUsers || []).map((p: { id: string; email: string; created_at: string; created_by: string | null }) => ({
         id: p.id,
@@ -563,8 +564,13 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
         />
       </div>
 
+      {/* Debug Info */}
+      <div style={{ marginBottom: '1rem', padding: '0.5rem', background: '#f3f4f6', borderRadius: '0.25rem', fontSize: '0.85rem' }}>
+        <strong>Debug:</strong> Total usuários: {users.length} | Filtrados: {filteredUsers.length} | Loading: {loading.toString()}
+      </div>
+
       {/* Users List */}
-      <h4 style={{ marginBottom: '1rem' }}>👥 Usuários Registrados</h4>
+      <h4 style={{ marginBottom: '1rem' }}>👥 Usuários Registrados ({users.length})</h4>
       <div className="table-container">
         <table className="table">
           <thead>
