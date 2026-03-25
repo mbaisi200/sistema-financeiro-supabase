@@ -150,8 +150,9 @@ export function Dashboard() {
   // ========================================
   // Mostra o quanto entrou vs saiu do banco no período
   // Fórmula: Receitas - Despesas em débito - Pagamentos de cartão
+  // INCLUINDO lançamentos agendados para consistência com outras métricas
   // ========================================
-  const cashFlow = income - expenses - cardPayments;
+  const cashFlow = totalIncomeWithScheduled - totalExpensesWithScheduled - cardPayments;
 
   // Category breakdowns (INCLUINDO lançamentos agendados)
   const expensesByCategory: Record<string, number> = {};
