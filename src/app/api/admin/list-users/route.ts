@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'SUPABASE_SERVICE_ROLE_KEY necessária.' }, { status: 500 });
     }
 
+    // Criar cliente admin com Service Role Key
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     });
@@ -47,6 +48,8 @@ export async function GET(request: NextRequest) {
     if (pendingError) {
       console.error('[LIST-USERS] Erro ao carregar pendentes:', pendingError);
     }
+
+    console.log('[LIST-USERS] Retornando', users?.length || 0, 'usuários');
 
     return NextResponse.json({
       users: users || [],
