@@ -41,10 +41,13 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
   const isAdmin = user?.email && ADMIN_EMAILS.map(e => e.toLowerCase()).includes(user.email.toLowerCase());
 
   const loadUsers = async () => {
-    if (!user || !isAdmin) return;
+    if (!user || !isAdmin) {
+      console.log('[AdminPanel] loadUsers bloqueado - user:', !!user, 'isAdmin:', isAdmin);
+      return;
+    }
     setLoading(true);
     try {
-      console.log('[AdminPanel] Carregando usuários via API...');
+      console.log('[AdminPanel] Carregando usuários via API...', 'adminEmail:', user.email);
 
       // Usar API com Service Role Key para ignorar RLS
       const response = await fetch(`/api/admin/list-users?adminEmail=${encodeURIComponent(user.email)}`);
@@ -55,6 +58,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       }
 
       const data = await response.json();
+      console.log('[AdminPanel] Resposta da API:', data);
       console.log('[AdminPanel] Usuários encontrados:', data.users?.length || 0);
 
       // Lista de emails admin em lowercase para comparação
@@ -74,6 +78,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
         };
       });
 
+      console.log('[AdminPanel] Lista processada:', usersList);
       setUsers(usersList.sort((a, b) => a.email.localeCompare(b.email)));
 
       const pendingList: PendingUser[] = (data.pendingUsers || []).map((p: { id: string; email: string; created_at: string; created_by: string | null }) => ({
@@ -167,8 +172,15 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
         return;
       }
 
-      // Se requer registro do usuário, mostrar instrução
-      if (result.requiresRegistration) {
+      // Se requer sincronização, mostrar aviso e sincronizar automaticamente
+      if (result.syncRequired) {
+        showNotification(`⚠️ ${result.warning}`, 'error');
+        // Oferecer sincronização automática
+        if (confirm('Deseja sincronizar os usuários agora?')) {
+          await handleSyncUsers();
+        }
+      } else if (result.requiresRegistration) {
+        // Se requer registro do usuário, mostrar instrução
         showNotification(`✉️ Convite criado! O usuário deve se registrar com email: ${newUserEmail} e a senha fornecida.`, 'success');
       } else {
         showNotification(`Usuário ${newUserEmail} criado com sucesso!`, 'success');
@@ -436,6 +448,14 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h3 style={{ margin: 0 }}>👑 Painel de Administração</h3>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            className="btn btn-sm btn-primary"
+            onClick={loadUsers}
+            disabled={loading}
+            title="Recarregar lista de usuários"
+          >
+            {loading ? '⏳ Carregando...' : '🔄 Recarregar'}
+          </button>
           <button
             className="btn btn-sm btn-secondary"
             onClick={handleDebugUsers}

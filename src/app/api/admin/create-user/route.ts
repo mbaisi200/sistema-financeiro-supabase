@@ -130,13 +130,34 @@ export async function POST(request: NextRequest) {
           id: newUid,
           email: normalizedEmail,
           created_by: adminEmail,
-          expires_at: expiresAt || null
+          expires_at: expiresAt || null,
+          created_at: new Date().toISOString()
         })
         .select();
 
       if (userInsertError) {
         console.error('Erro ao criar registro de usuário:', userInsertError);
-        // Não falha aqui, o usuário foi criado no Auth
+        // Tentar criar a tabela se não existir
+        const tableCheckError = userInsertError.message;
+        if (tableCheckError.includes('relation') || tableCheckError.includes('does not exist')) {
+          return NextResponse.json({
+            error: '⚠️ Tabela "users" não encontrada no Supabase. Execute o script SQL para criar a tabela.',
+            instructions: {
+              step1: 'Acesse o SQL Editor no Supabase Dashboard',
+              step2: 'Execute: CREATE TABLE IF NOT EXISTS users (id UUID PRIMARY KEY, email TEXT UNIQUE, created_at TIMESTAMPTZ DEFAULT NOW(), created_by TEXT, expires_at TIMESTAMPTZ, is_admin BOOLEAN DEFAULT FALSE);',
+              step3: 'Execute: ALTER TABLE users ENABLE ROW LEVEL SECURITY;',
+              step4: 'Depois clique em "Sincronizar" no painel admin'
+            }
+          }, { status: 500 });
+        }
+        // Retornar aviso mas não falhar - o usuário pode sincronizar depois
+        return NextResponse.json({
+          success: true,
+          uid: newUid,
+          email: normalizedEmail,
+          warning: 'Usuário criado no Auth, mas houve erro ao salvar na tabela users. Clique em "Sincronizar" para corrigir.',
+          syncRequired: true
+        });
       } else {
         console.log('Usuário criado na tabela users:', insertedUser);
       }
