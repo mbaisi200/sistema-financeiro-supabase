@@ -17,6 +17,8 @@ export function Dashboard() {
   const { transactions, banks, creditCardTransactions, categories, creditCards, scheduledTransactions, getBankBalance, getBankName, getBankIcon, getCategoryName, getCategoryIcon, getCardName, getCardIcon, getCardTotalDebt } = useFinance();
   const [filterBank, setFilterBank] = useState('');
   const [filterPeriod, setFilterPeriod] = useState('thisMonth');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [categoryReport, setCategoryReport] = useState<CategoryReport | null>(null);
   const [showAnalysis, setShowAnalysis] = useState(true);
 
@@ -33,12 +35,25 @@ export function Dashboard() {
   const lastMonthStartStr = lastMonthStart.toISOString().split('T')[0];
   const lastMonthEndStr = lastMonthEnd.toISOString().split('T')[0];
 
+  // Helper para obter o range de datas do período selecionado
+  const getPeriodRange = () => {
+    if (filterPeriod === 'thisMonth') return { start: thisMonthStr, end: nowStr };
+    if (filterPeriod === 'lastMonth') return { start: lastMonthStartStr, end: lastMonthEndStr };
+    if (filterPeriod === 'custom' && customStartDate && customEndDate) return { start: customStartDate, end: customEndDate };
+    return null; // Histórico completo
+  };
+
+  const periodRange = getPeriodRange();
+
+  const isInPeriod = (dateStr: string) => {
+    if (!periodRange) return true;
+    return dateStr >= periodRange.start && dateStr <= periodRange.end;
+  };
+
   // Filter transactions
   const monthTx = transactions.filter(t => {
     if (filterBank && t.bank !== filterBank) return false;
-    if (filterPeriod === 'thisMonth') return t.date >= thisMonthStr && t.date <= nowStr;
-    if (filterPeriod === 'lastMonth') return t.date >= lastMonthStartStr && t.date <= lastMonthEndStr;
-    return true;
+    return isInPeriod(t.date);
   });
 
   // ========================================
@@ -48,13 +63,18 @@ export function Dashboard() {
   // ========================================
   const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
 
-  // Lançamentos futuros do mês atual (TODOS os dias do mês, incluindo futuros)
+  // Data final para agendados (para este mês usa mês completo, para custom usa a data selecionada)
+  const scheduledEnd = filterPeriod === 'thisMonth'
+    ? thisMonthEnd
+    : (filterPeriod === 'custom' && customEndDate ? customEndDate : (filterPeriod === 'lastMonth' ? lastMonthEndStr : null));
+
+  // Lançamentos futuros do período
   const monthScheduled = scheduledTransactions.filter(s => {
     if (s.status !== 'pending') return false;
-    // Para lançamentos futuros, usar o MÊS COMPLETO, não só até hoje
-    if (filterPeriod === 'thisMonth') return s.dueDate >= thisMonthStr && s.dueDate <= thisMonthEnd;
-    if (filterPeriod === 'lastMonth') return s.dueDate >= lastMonthStartStr && s.dueDate <= lastMonthEndStr;
-    return true;
+    if (!periodRange) return true;
+    const start = periodRange.start;
+    const end = filterPeriod === 'thisMonth' ? thisMonthEnd : periodRange.end;
+    return s.dueDate >= start && s.dueDate <= end;
   });
 
   // Separar lançamentos agendados por tipo
@@ -109,9 +129,7 @@ export function Dashboard() {
   
   // Filter credit card transactions by period
   const ccFiltered = creditCardTransactions.filter(t => {
-    if (filterPeriod === 'thisMonth') return t.date >= thisMonthStr && t.date <= nowStr;
-    if (filterPeriod === 'lastMonth') return t.date >= lastMonthStartStr && t.date <= lastMonthEndStr;
-    return true;
+    return isInPeriod(t.date);
   });
 
   // ========================================
@@ -444,7 +462,25 @@ export function Dashboard() {
   const getPeriodLabel = () => {
     if (filterPeriod === 'thisMonth') return 'Este Mês';
     if (filterPeriod === 'lastMonth') return 'Mês Anterior';
+    if (filterPeriod === 'custom' && customStartDate && customEndDate) {
+      return `${fmtDate(customStartDate)} - ${fmtDate(customEndDate)}`;
+    }
     return 'Histórico';
+  };
+
+  // Resetar datas personalizadas ao mudar de período
+  const handlePeriodChange = (value: string) => {
+    setFilterPeriod(value);
+    if (value !== 'custom') {
+      setCustomStartDate('');
+      setCustomEndDate('');
+    } else {
+      // Pré-preencher com o primeiro dia do mês atual até hoje
+      const today = new Date();
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setCustomStartDate(firstDay.toISOString().split('T')[0]);
+      setCustomEndDate(today.toISOString().split('T')[0]);
+    }
   };
 
   return (
@@ -461,12 +497,38 @@ export function Dashboard() {
           </div>
           <div className="form-group">
             <label className="form-label">Período</label>
-            <select className="form-select" value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)}>
+            <select className="form-select" value={filterPeriod} onChange={e => handlePeriodChange(e.target.value)}>
               <option value="">Histórico</option>
               <option value="thisMonth">Este Mês</option>
               <option value="lastMonth">Mês Anterior</option>
+              <option value="custom">Personalizado</option>
             </select>
           </div>
+          {filterPeriod === 'custom' && (
+            <>
+              <div className="form-group">
+                <label className="form-label">De</label>
+                <input
+                  type="date"
+                  className="form-select"
+                  value={customStartDate}
+                  onChange={e => setCustomStartDate(e.target.value)}
+                  style={{ colorScheme: 'dark' }}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Até</label>
+                <input
+                  type="date"
+                  className="form-select"
+                  value={customEndDate}
+                  onChange={e => setCustomEndDate(e.target.value)}
+                  min={customStartDate}
+                  style={{ colorScheme: 'dark' }}
+                />
+              </div>
+            </>
+          )}
           <div className="form-group">
             <button className="btn btn-primary" style={{ marginTop: '1.5rem' }}>Atualizar 🔄</button>
           </div>
