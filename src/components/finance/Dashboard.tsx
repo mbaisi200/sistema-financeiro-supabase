@@ -222,11 +222,28 @@ export function Dashboard() {
     }
   });
 
-  // Cálculo para gráfico Receitas x Despesas (INCLUINDO AGENDADOS)
+  // ========================================
+  // GRÁFICO RECEITAS x DESPESAS (CORRIGIDO)
+  // ========================================
+  // totalExpenses = despesas em débito + gastos no cartão (NÃO inclui pagamentos de cartão,
+  // porque pagamento de fatura é apenas transferência banco→cartão, não uma nova despesa)
+  // ========================================
   const totalExpenses = totalExpensesWithScheduled + cardSpentWithScheduled;
-  const revenuePercent = totalIncomeWithScheduled > 0 ? ((totalIncomeWithScheduled / (totalIncomeWithScheduled + totalExpenses)) * 100) : 0;
-  const expensePercent = totalExpenses > 0 ? ((totalExpenses / (totalIncomeWithScheduled + totalExpenses)) * 100) : 0;
+
+  // Comprometimento: quanto da receita foi gasto em despesas
+  const expenseCommitment = totalIncomeWithScheduled > 0 ? (totalExpenses / totalIncomeWithScheduled) * 100 : 0;
+
+  // Percentuais para o gráfico de pizza: proporção entre receitas e despesas
+  const revenuePercent = totalIncomeWithScheduled > 0
+    ? (totalIncomeWithScheduled / (totalIncomeWithScheduled + totalExpenses)) * 100
+    : 0;
+  const expensePercent = totalExpenses > 0
+    ? (totalExpenses / (totalIncomeWithScheduled + totalExpenses)) * 100
+    : 0;
+
+  // Saldo = receitas - despesas (quanto sobrou depois de tudo)
   const balance = totalIncomeWithScheduled - totalExpenses;
+  // Taxa de economia: % da receita que sobrou
   const savingsRate = totalIncomeWithScheduled > 0 ? ((balance / totalIncomeWithScheduled) * 100) : 0;
 
   // ========================================
@@ -955,14 +972,14 @@ export function Dashboard() {
               <div style={{ width: 16, height: 16, background: '#22c55e', borderRadius: 4 }}></div>
               <div>
                 <div style={{ fontWeight: 600, color: '#22c55e' }}>💰 Receitas</div>
-                <div style={{ fontSize: '0.9rem' }}>{fmt(income)} ({revenuePercent.toFixed(1)}%)</div>
+                <div style={{ fontSize: '0.9rem' }}>{fmt(totalIncomeWithScheduled)} ({revenuePercent.toFixed(1)}%)</div>
               </div>
             </div>
             <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <div style={{ width: 16, height: 16, background: '#ef4444', borderRadius: 4 }}></div>
               <div>
                 <div style={{ fontWeight: 600, color: '#ef4444' }}>💸 Despesas</div>
-                <div style={{ fontSize: '0.9rem' }}>{fmt(totalExpenses)} ({expensePercent.toFixed(1)}%)</div>
+                <div style={{ fontSize: '0.9rem' }}>{fmt(totalExpenses)} ({expenseCommitment.toFixed(1)}% da receita)</div>
               </div>
             </div>
             <div style={{ padding: '0.75rem', background: balance >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: '0.5rem', border: `1px solid ${balance >= 0 ? '#86efac' : '#fca5a5'}` }}>
