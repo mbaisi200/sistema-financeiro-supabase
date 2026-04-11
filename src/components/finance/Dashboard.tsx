@@ -223,7 +223,7 @@ export function Dashboard() {
   });
 
   // ========================================
-  // GRÁFICO RECEITAS x DESPESAS (CORRIGIDO)
+  // GRÁFICO RECEITAS x DESPESAS
   // ========================================
   // totalExpenses = despesas em débito + gastos no cartão (NÃO inclui pagamentos de cartão,
   // porque pagamento de fatura é apenas transferência banco→cartão, não uma nova despesa)
@@ -236,15 +236,15 @@ export function Dashboard() {
   const savingsRate = totalIncomeWithScheduled > 0 ? ((balance / totalIncomeWithScheduled) * 100) : 0;
 
   // ========================================
-  // PERCENTUAIS PARA O GRÁFICO (INDICADOR DE UTILIZAÇÃO DA RECEITA)
+  // PERCENTUAIS PARA O GRÁFICO (PROPORCIONAL)
   // ========================================
-  // A pizza mostra: verde = o que sobrou (economia), vermelho = o que foi gasto (despesas)
-  // Ambos são % DA RECEITA, sempre consistentes entre visual e legenda
+  // A pizza mostra a PROPORÇÃO entre receitas e despesas no total movimentado.
+  // Sempre soma 100%, funciona mesmo quando despesas > receitas.
+  // Ex: Rec=R$1000, Desp=R$2437 → verde=29.1%, vermelho=70.9%
   // ========================================
-  const expensePercent = totalIncomeWithScheduled > 0
-    ? Math.min((totalExpenses / totalIncomeWithScheduled) * 100, 100)
-    : (totalExpenses > 0 ? 100 : 0);
-  const savingsPercent = 100 - expensePercent;
+  const totalMoved = totalIncomeWithScheduled + totalExpenses;
+  const incomePercent = totalMoved > 0 ? (totalIncomeWithScheduled / totalMoved) * 100 : 50;
+  const expensePercent = totalMoved > 0 ? (totalExpenses / totalMoved) * 100 : 50;
 
   // ========================================
   // COMPROMETIMENTO DA RECEITA (CORRIGIDO)
@@ -930,16 +930,16 @@ export function Dashboard() {
       <div className="card" style={{ marginTop: '1rem' }}>
         <h3 style={{ marginBottom: '1rem', textAlign: 'center' }}>📊 Receitas x Despesas</h3>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2rem', flexWrap: 'wrap' }}>
-          {/* Gráfico de pizza: indicador de utilização da receita */}
+          {/* Gráfico de pizza: proporção entre receitas e despesas */}
           <div style={{ position: 'relative' }}>
             <div 
               style={{ 
                 width: 200, 
                 height: 200, 
                 borderRadius: '50%', 
-                background: balance >= 0
-                  ? `conic-gradient(#22c55e 0% ${savingsPercent}%, #ef4444 ${savingsPercent}% 100%)`
-                  : '#ef4444',
+                background: totalMoved > 0
+                  ? `conic-gradient(#22c55e 0% ${incomePercent}%, #ef4444 ${incomePercent}% 100%)`
+                  : '#e5e7eb',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -962,7 +962,7 @@ export function Dashboard() {
                   {fmt(balance)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                  ({savingsRate >= 0 ? '+' : ''}{savingsRate.toFixed(1)}%)
+                  {savingsRate >= 0 ? '+' : ''}{savingsRate.toFixed(1)}%
                 </div>
               </div>
             </div>
@@ -974,14 +974,14 @@ export function Dashboard() {
               <div style={{ width: 16, height: 16, background: '#22c55e', borderRadius: 4 }}></div>
               <div>
                 <div style={{ fontWeight: 600, color: '#22c55e' }}>💰 Receitas</div>
-                <div style={{ fontSize: '0.9rem' }}>{fmt(totalIncomeWithScheduled)}</div>
+                <div style={{ fontSize: '0.9rem' }}>{fmt(totalIncomeWithScheduled)} <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>({incomePercent.toFixed(1)}%)</span></div>
               </div>
             </div>
             <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <div style={{ width: 16, height: 16, background: '#ef4444', borderRadius: 4 }}></div>
               <div>
                 <div style={{ fontWeight: 600, color: '#ef4444' }}>💸 Despesas</div>
-                <div style={{ fontSize: '0.9rem' }}>{fmt(totalExpenses)} <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>({expensePercent.toFixed(1)}% da receita)</span></div>
+                <div style={{ fontSize: '0.9rem' }}>{fmt(totalExpenses)} <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>({expensePercent.toFixed(1)}%)</span></div>
               </div>
             </div>
             <div style={{ padding: '0.75rem', background: balance >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: '0.5rem', border: `1px solid ${balance >= 0 ? '#86efac' : '#fca5a5'}` }}>
@@ -998,18 +998,18 @@ export function Dashboard() {
           </div>
         </div>
         
-        {/* Barra visual: utilização da receita */}
+        {/* Barra visual: proporção receitas x despesas */}
         <div style={{ marginTop: '1.5rem' }}>
           <div style={{ display: 'flex', height: 30, borderRadius: 8, overflow: 'hidden', background: '#e5e7eb' }}>
-            <div style={{ width: `${savingsPercent}%`, background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.75rem', fontWeight: 600, minWidth: savingsPercent > 10 ? 60 : 0 }}>
-              {savingsPercent > 10 && `${savingsPercent.toFixed(0)}%`}
+            <div style={{ width: `${incomePercent}%`, background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.75rem', fontWeight: 600, minWidth: incomePercent > 10 ? 60 : 0 }}>
+              {incomePercent > 10 && `${incomePercent.toFixed(0)}%`}
             </div>
             <div style={{ width: `${expensePercent}%`, background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.75rem', fontWeight: 600, minWidth: expensePercent > 10 ? 60 : 0 }}>
               {expensePercent > 10 && `${expensePercent.toFixed(0)}%`}
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
-            <span>💰 Economia</span>
+            <span>💰 Receitas</span>
             <span>💸 Despesas</span>
           </div>
         </div>
