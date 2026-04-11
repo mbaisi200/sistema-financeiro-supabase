@@ -77,21 +77,41 @@ export function Dashboard() {
     return s.dueDate >= start && s.dueDate <= end;
   });
 
+  // Encontrar ID da categoria PAGAMENTO CARTÃO (precisa ser definido ANTES dos filtros agendados)
+  const pagamentoCartaoCategoryIds = [
+    ...categories
+      .filter(c => c.name.toUpperCase() === 'PAGAMENTO CARTÃO')
+      .map(c => c.id),
+    'pagamento_cartao'
+  ];
+
   // Separar lançamentos agendados por tipo
-  // Despesas: transactionType === 'debit' (ou não é credit) com banco definido
+  // Despesas: transactionType === 'debit' (ou não é credit) com banco definido, SEM cartão (evita dupla contagem)
   // Receitas: transactionType === 'credit' com banco definido
-  // Cartão: tem card definido (independente do transactionType)
+  // Cartão: tem card definido (independente de ter banco, mas NÃO é pagamento de fatura)
+  // Pagamento Cartão: transactionType !== 'credit' com banco E categoria pagamento_cartao
   const scheduledDebitExpenses = monthScheduled.filter(s => {
-    // Despesa em débito: não é receita (credit) e tem banco
-    return s.transactionType !== 'credit' && s.bank && s.bank.trim() !== '';
+    // Despesa em débito: não é receita, tem banco, NÃO tem cartão, e NÃO é pagamento de cartão
+    return s.transactionType !== 'credit'
+      && s.bank && s.bank.trim() !== ''
+      && !(s.card && s.card.trim() !== '')
+      && !pagamentoCartaoCategoryIds.includes(s.category);
   });
   const scheduledCreditIncome = monthScheduled.filter(s => {
     // Receita: é credit e tem banco
     return s.transactionType === 'credit' && s.bank && s.bank.trim() !== '';
   });
   const scheduledCardExpenses = monthScheduled.filter(s => {
-    // Gasto no cartão: tem cartão definido
-    return s.card && s.card.trim() !== '';
+    // Gasto no cartão: tem cartão definido (independente de ter banco ou não)
+    // Mas NÃO é pagamento de fatura
+    return s.card && s.card.trim() !== ''
+      && !pagamentoCartaoCategoryIds.includes(s.category);
+  });
+  const scheduledCardPayments = monthScheduled.filter(s => {
+    // Pagamento de fatura agendado: não é receita, tem banco, e categoria é pagamento_cartao
+    return s.transactionType !== 'credit'
+      && s.bank && s.bank.trim() !== ''
+      && pagamentoCartaoCategoryIds.includes(s.category);
   });
 
   // Debug: mostrar quantidade de lançamentos encontrados
@@ -99,7 +119,8 @@ export function Dashboard() {
     total: monthScheduled.length,
     debitos: scheduledDebitExpenses.length,
     creditos: scheduledCreditIncome.length,
-    cartoes: scheduledCardExpenses.length
+    cartoes: scheduledCardExpenses.length,
+    pagamentosCartao: scheduledCardPayments.length
   };
   console.log('Lançamentos agendados:', scheduledDebug);
 
@@ -107,14 +128,7 @@ export function Dashboard() {
   const scheduledDebitExpensesTotal = scheduledDebitExpenses.reduce((s, t) => s + t.value, 0);
   const scheduledCreditIncomeTotal = scheduledCreditIncome.reduce((s, t) => s + t.value, 0);
   const scheduledCardExpensesTotal = scheduledCardExpenses.reduce((s, t) => s + t.value, 0);
-
-  // Encontrar ID da categoria PAGAMENTO CARTÃO
-  const pagamentoCartaoCategoryIds = [
-    ...categories
-      .filter(c => c.name.toUpperCase() === 'PAGAMENTO CARTÃO')
-      .map(c => c.id),
-    'pagamento_cartao'
-  ];
+  const scheduledCardPaymentsTotal = scheduledCardPayments.reduce((s, t) => s + t.value, 0);
 
   // ========================================
   // RECEITAS E DESPESAS (INCLUINDO LANÇAMENTOS AGENDADOS)
@@ -126,6 +140,8 @@ export function Dashboard() {
   // Totais INCLUINDO lançamentos agendados
   const totalIncomeWithScheduled = income + scheduledCreditIncomeTotal;
   const totalExpensesWithScheduled = expenses + scheduledDebitExpensesTotal;
+  // Pagamentos de cartão INCLUINDO agendados
+  const totalCardPaymentsWithScheduled = cardPayments + scheduledCardPaymentsTotal;
   
   // Filter credit card transactions by period
   const ccFiltered = creditCardTransactions.filter(t => {
@@ -170,7 +186,7 @@ export function Dashboard() {
   // Fórmula: Receitas - Despesas em débito - Pagamentos de cartão
   // INCLUINDO lançamentos agendados para consistência com outras métricas
   // ========================================
-  const cashFlow = totalIncomeWithScheduled - totalExpensesWithScheduled - cardPayments;
+  const cashFlow = totalIncomeWithScheduled - totalExpensesWithScheduled - totalCardPaymentsWithScheduled;
 
   // Category breakdowns (INCLUINDO lançamentos agendados)
   const expensesByCategory: Record<string, number> = {};
@@ -179,7 +195,7 @@ export function Dashboard() {
   });
   // Adicionar despesas agendadas por categoria
   scheduledDebitExpenses.forEach(t => {
-    if (t.category) {
+    if (t.category && !pagamentoCartaoCategoryIds.includes(t.category)) {
       expensesByCategory[t.category] = (expensesByCategory[t.category] || 0) + t.value;
     }
   });
@@ -232,6 +248,7 @@ export function Dashboard() {
   const scheduledDebitCount = scheduledDebitExpenses.length;
   const scheduledCreditCount = scheduledCreditIncome.length;
   const scheduledCardCount = scheduledCardExpenses.length;
+  const scheduledCardPaymentCount = scheduledCardPayments.length;
 
   // ========================================
   // RECONCILIAÇÃO DOS VALORES DO PERÍODO
@@ -242,7 +259,7 @@ export function Dashboard() {
 
   // Receitas e despesas DO PERÍODO (incluindo lançamentos agendados)
   const periodIncome = totalIncomeWithScheduled; // receitas realizadas + agendadas
-  const periodExpenses = totalExpensesWithScheduled + cardPayments; // despesas + pagamentos de cartão
+  const periodExpenses = totalExpensesWithScheduled + totalCardPaymentsWithScheduled; // despesas + pagamentos de cartão (incluindo agendados)
 
   // Variação do período
   const periodVariation = periodIncome - periodExpenses;
@@ -362,8 +379,11 @@ export function Dashboard() {
     .reduce((sum, s) => sum + s.value, 0);
 
   // Receita mínima necessária (considerando receitas programadas)
+  // Fórmula corrigida: despesas fixas + parcelas + margem de 80% sobre despesas variáveis (sem dupla contagem)
   const totalScheduledIncome = monthlyFixedIncome + thisMonthParcelsIncome;
-  const minimumRequired = Math.max(0, monthlyFixedExpenses + thisMonthParcels + (totalExpenses > 0 ? totalExpenses * 0.8 : 0) - totalScheduledIncome);
+  const totalFixedCommitments = monthlyFixedExpenses + thisMonthParcels;
+  const totalVariableExpenses = Math.max(0, totalExpenses - totalFixedCommitments);
+  const minimumRequired = Math.max(0, totalFixedCommitments + totalVariableExpenses * 0.8 - totalScheduledIncome);
 
   // ============================================================
   // Comprometimento = (Total de Despesas / Total de Receitas) × 100
@@ -568,8 +588,8 @@ export function Dashboard() {
         <div className="stat-card yellow">
           <div className="stat-icon">🏦</div>
           <div className="stat-content">
-            <div className="stat-value">{fmt(cardPayments)}</div>
-            <div className="stat-label">PAGAMENTOS CARTÃO</div>
+            <div className="stat-value">{fmt(totalCardPaymentsWithScheduled)}</div>
+            <div className="stat-label">PAGAMENTOS CARTÃO {scheduledCardPaymentCount > 0 && <span style={{fontSize: '0.7rem', color: '#d97706'}}>({scheduledCardPaymentCount} prog.)</span>}</div>
           </div>
         </div>
         <div className="stat-card teal">
@@ -607,8 +627,11 @@ export function Dashboard() {
             )}
           </div>
           <div style={{ padding: '0.75rem', background: '#fef3c7', borderRadius: '0.5rem' }}>
-            <div style={{ color: '#92400e' }}>- Pagamentos Cartão</div>
-            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#d97706' }}>-{fmt(cardPayments)}</div>
+            <div style={{ color: '#92400e' }}>- Pagamentos Cartão {scheduledCardPaymentCount > 0 && <span style={{fontSize: '0.7rem'}}>(realiz.+prog.)</span>}</div>
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#d97706' }}>-{fmt(totalCardPaymentsWithScheduled)}</div>
+            {scheduledCardPaymentsTotal > 0 && (
+              <div style={{ fontSize: '0.7rem', color: '#b45309' }}>Prog: -{fmt(scheduledCardPaymentsTotal)}</div>
+            )}
           </div>
           <div style={{ padding: '0.75rem', background: periodVariation >= 0 ? '#dbeafe' : '#fecaca', borderRadius: '0.5rem' }}>
             <div style={{ color: periodVariation >= 0 ? '#1e40af' : '#991b1b' }}>= Variação</div>
@@ -633,6 +656,9 @@ export function Dashboard() {
               )}
               {scheduledCardCount > 0 && (
                 <div style={{ color: '#7c3aed' }}>💳 Cartão: {scheduledCardCount} (-{fmt(scheduledCardExpensesTotal)})</div>
+              )}
+              {scheduledCardPaymentCount > 0 && (
+                <div style={{ color: '#d97706' }}>🏦 Pgto Cartão: {scheduledCardPaymentCount} (-{fmt(scheduledCardPaymentsTotal)})</div>
               )}
             </div>
           </div>
