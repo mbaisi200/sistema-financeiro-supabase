@@ -962,7 +962,7 @@ export function Dashboard() {
                   {fmt(balance)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                  {savingsRate >= 0 ? '+' : ''}{savingsRate.toFixed(1)}%
+                  {savingsRate >= 0 ? `+${savingsRate.toFixed(1)}%` : `${savingsRate.toFixed(1)}%`}
                 </div>
               </div>
             </div>
@@ -985,10 +985,19 @@ export function Dashboard() {
               </div>
             </div>
             <div style={{ padding: '0.75rem', background: balance >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: '0.5rem', border: `1px solid ${balance >= 0 ? '#86efac' : '#fca5a5'}` }}>
-              <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Taxa de Economia</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: balance >= 0 ? '#22c55e' : '#ef4444' }}>
-                {savingsRate >= 0 ? '📈 ' : '📉 '}{savingsRate.toFixed(1)}%
+              <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                {balance >= 0 ? 'Taxa de Economia' : 'Déficit da Receita'}
               </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: balance >= 0 ? '#22c55e' : '#ef4444' }}>
+                {balance >= 0 
+                  ? `📈 ${savingsRate.toFixed(1)}%`
+                  : `📉 ${Math.abs(savingsRate).toFixed(1)}%`}
+              </div>
+              {balance < 0 && (
+                <div style={{ fontSize: '0.7rem', color: '#991b1b', marginTop: '0.25rem' }}>
+                  Despesas consomem {Math.abs(savingsRate).toFixed(1)}% da receita
+                </div>
+              )}
             </div>
             {balance < 0 && (
               <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#fef2f2', borderRadius: '0.375rem', border: '1px solid #fca5a5', fontSize: '0.75rem', color: '#dc2626' }}>
