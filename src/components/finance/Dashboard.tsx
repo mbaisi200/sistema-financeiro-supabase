@@ -34,10 +34,12 @@ export function Dashboard() {
   const nowStr = now.toISOString().split('T')[0];
   const lastMonthStartStr = lastMonthStart.toISOString().split('T')[0];
   const lastMonthEndStr = lastMonthEnd.toISOString().split('T')[0];
+  const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
 
   // Helper para obter o range de datas do período selecionado
+  // IMPORTANTE: para gráficos de projeção, usa o fim do mês (não só até hoje)
   const getPeriodRange = () => {
-    if (filterPeriod === 'thisMonth') return { start: thisMonthStr, end: nowStr };
+    if (filterPeriod === 'thisMonth') return { start: thisMonthStr, end: thisMonthEnd };
     if (filterPeriod === 'lastMonth') return { start: lastMonthStartStr, end: lastMonthEndStr };
     if (filterPeriod === 'custom' && customStartDate && customEndDate) return { start: customStartDate, end: customEndDate };
     return null; // Histórico completo
@@ -61,7 +63,6 @@ export function Dashboard() {
   // ========================================
   // Inclui lançamentos pendentes do MÊS COMPLETO (incluindo dias futuros)
   // ========================================
-  const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
 
   // Data final para agendados (para este mês usa mês completo, para custom usa a data selecionada)
   const scheduledEnd = filterPeriod === 'thisMonth'
@@ -155,10 +156,10 @@ export function Dashboard() {
   // cardBalance: saldo REAL do cartão (gastos - pagamentos, todo histórico)
   // ========================================
 
-  // Gastos no cartão durante o período filtrado
+  // Gastos no cartão durante o período filtrado (ONLY realizado, não agendado para evitar distorção)
   const cardSpent = ccFiltered.filter(t => !t.isPayment && t.value > 0).reduce((s, t) => s + t.value, 0);
-
-  // Gastos no cartão INCLUINDO lançamentos agendados
+  
+  // Para projeção futura: gastos agendados do cartão (para o fluxo de caixa, não para o gráfico)
   const cardSpentWithScheduled = cardSpent + scheduledCardExpensesTotal;
   
   // Saldo REAL de cada cartão (gastos - pagamentos de TODO o histórico)
@@ -227,11 +228,17 @@ export function Dashboard() {
   // ========================================
   // totalExpenses = despesas em débito + gastos no cartão (NÃO inclui pagamentos de cartão,
   // porque pagamento de fatura é apenas transferência banco→cartão, não uma nova despesa)
+  // Para GRÁFICO: usa ONLY realizado (sem agendados para evitar distorção)
+  // Para FLUXO: usa com agendados
   // ========================================
+  // totalExpenses = despesas em débito (NÃO inclui cartão - que é separado)
+  // Este é o valor correto para o gráfico: só débito, cartão é mostrado à parte
+  // ========================================
+  const totalExpensesForGraph = totalExpensesWithScheduled;
   const totalExpenses = totalExpensesWithScheduled + cardSpentWithScheduled;
 
   // Saldo = receitas - despesas (quanto sobrou depois de tudo)
-  const balance = totalIncomeWithScheduled - totalExpenses;
+  const balance = totalIncomeWithScheduled - totalExpensesForGraph;
   // Taxa de economia: % da receita que sobrou
   const savingsRate = totalIncomeWithScheduled > 0 ? ((balance / totalIncomeWithScheduled) * 100) : 0;
 
@@ -242,9 +249,9 @@ export function Dashboard() {
   // Sempre soma 100%, funciona mesmo quando despesas > receitas.
   // Ex: Rec=R$1000, Desp=R$2437 → verde=29.1%, vermelho=70.9%
   // ========================================
-  const totalMoved = totalIncomeWithScheduled + totalExpenses;
+  const totalMoved = totalIncomeWithScheduled + totalExpensesForGraph;
   const incomePercent = totalMoved > 0 ? (totalIncomeWithScheduled / totalMoved) * 100 : 50;
-  const expensePercent = totalMoved > 0 ? (totalExpenses / totalMoved) * 100 : 50;
+  const expensePercent = totalMoved > 0 ? (totalExpensesForGraph / totalMoved) * 100 : 50;
 
   // ========================================
   // COMPROMETIMENTO DA RECEITA (CORRIGIDO)
@@ -981,7 +988,7 @@ export function Dashboard() {
               <div style={{ width: 16, height: 16, background: '#ef4444', borderRadius: 4 }}></div>
               <div>
                 <div style={{ fontWeight: 600, color: '#ef4444' }}>💸 Despesas</div>
-                <div style={{ fontSize: '0.9rem' }}>{fmt(totalExpenses)} <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>({expensePercent.toFixed(1)}%)</span></div>
+                <div style={{ fontSize: '0.9rem' }}>{fmt(totalExpensesForGraph)} <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>({expensePercent.toFixed(1)}%)</span></div>
               </div>
             </div>
             <div style={{ padding: '0.75rem', background: balance >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: '0.5rem', border: `1px solid ${balance >= 0 ? '#86efac' : '#fca5a5'}` }}>
