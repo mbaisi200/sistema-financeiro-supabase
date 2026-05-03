@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
 import { supabase } from '@/lib/supabase';
 import { AdminUser, ADMIN_EMAILS, toUpperCase } from '@/lib/types';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 interface PendingUser {
   id: string;
@@ -16,6 +17,7 @@ interface EditModalData {
   uid: string;
   email: string;
   expiresAt: string;
+  createdBy: string;
 }
 
 interface SeedModalData {
@@ -37,6 +39,13 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
   const [editModal, setEditModal] = useState<EditModalData | null>(null);
   const [editExpiresAt, setEditExpiresAt] = useState('');
   const [seedModal, setSeedModal] = useState<SeedModalData | null>(null);
+  const [dbStats, setDbStats] = useState<{ stats: { clientEmail: string; clientId: string; stats: Record<string, number>; total: number; sizeMB: number }[]; totalStats: Record<string, number>; totalSizeMB: number; tables: string[] } | null>(null);
+  const [dbStatsLoading, setDbStatsLoading] = useState(false);
+  const [dbStatsClientFilter, setDbStatsClientFilter] = useState('');
+  const [showDbStats, setShowDbStats] = useState(false);
+  const [clientOptions, setClientOptions] = useState<{ email: string; id: string }[]>([]);
+
+  const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#6366f1', '#14b8a6'];
 
   const isAdmin = user?.email && ADMIN_EMAILS.map(e => e.toLowerCase()).includes(user.email.toLowerCase());
 
@@ -64,7 +73,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       // Lista de emails admin em lowercase para comparação
       const adminEmailsLower = ADMIN_EMAILS.map(e => e.toLowerCase());
 
-      const usersList: AdminUser[] = (data.users || []).map((u: { id: string; email: string; created_at: string; expires_at: string | null }) => {
+      const usersList: AdminUser[] = (data.users || []).map((u: { id: string; email: string; created_at: string; expires_at: string | null; created_by: string | null }) => {
         const userEmail = (u.email || '').toLowerCase();
         const isUserAdmin = adminEmailsLower.includes(userEmail);
 
@@ -74,7 +83,8 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
           createdAt: u.created_at || new Date().toISOString(),
           lastLogin: undefined,
           isAdmin: isUserAdmin,
-          expiresAt: u.expires_at || null
+          expiresAt: u.expires_at || null,
+          createdBy: u.created_by || null
         };
       });
 
@@ -296,7 +306,8 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
     setEditModal({
       uid: u.uid,
       email: u.email,
-      expiresAt: u.expiresAt || ''
+      expiresAt: u.expiresAt || '',
+      createdBy: u.createdBy || ''
     });
     setEditExpiresAt(u.expiresAt || '');
   };
@@ -353,6 +364,32 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
       console.error('Erro no debug:', error);
       alert('Erro ao buscar debug. Veja o console (F12).');
     }
+  };
+
+  const loadDbStats = async () => {
+    if (!user || !isAdmin) return;
+    setDbStatsLoading(true);
+    try {
+      const params = new URLSearchParams({ adminEmail: user.email });
+      if (dbStatsClientFilter) {
+        params.set('clientEmail', dbStatsClientFilter);
+      }
+      const response = await fetch(`/api/admin/db-stats?${params.toString()}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao carregar estatísticas');
+      }
+      const data = await response.json();
+      setDbStats(data);
+
+      if (!dbStatsClientFilter && data.stats && data.stats.length > 0) {
+        setClientOptions(data.stats.map((s: { clientEmail: string; clientId: string }) => ({ email: s.clientEmail, id: s.clientId })));
+      }
+    } catch (error) {
+      console.error('Erro ao carregar estatísticas:', error);
+      showNotification('Erro ao carregar estatísticas do banco de dados', 'error');
+    }
+    setDbStatsLoading(false);
   };
 
   // Abrir modal para popular dados de demonstração
@@ -576,6 +613,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
           <thead>
             <tr>
               <th>Email</th>
+              <th>Criado por</th>
               <th>Validade</th>
               <th>Status</th>
               <th>Criado em</th>
@@ -586,13 +624,13 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>
                   Carregando...
                 </td>
               </tr>
             ) : filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
                   Nenhum usuário encontrado
                 </td>
               </tr>
@@ -602,6 +640,7 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
                 return (
                   <tr key={u.uid} style={{ opacity: expired ? 0.6 : 1 }}>
                     <td>{u.email}</td>
+                    <td style={{ fontSize: '0.85rem', color: '#6b7280' }}>{u.createdBy || 'N/A'}</td>
                     <td>{formatDate(u.expiresAt)}</td>
                     <td>
                       {u.isAdmin ? (
@@ -672,6 +711,232 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
         </p>
       </div>
 
+      {/* Database Stats Section */}
+      <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '2px solid #e5e7eb' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h3 style={{ margin: 0 }}>📈 Estatísticas do Banco de Dados</h3>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={() => setShowDbStats(!showDbStats)}
+              disabled={dbStatsLoading}
+            >
+              {showDbStats ? '🔽 Ocultar' : '🔼 Mostrar'}
+            </button>
+            {showDbStats && (
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={loadDbStats}
+                disabled={dbStatsLoading}
+              >
+                {dbStatsLoading ? '⏳ Carregando...' : '🔄 Atualizar'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {showDbStats && (
+          <>
+            {/* Client Selector */}
+            <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+              <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                <label className="form-label">Selecionar cliente</label>
+                <select
+                  className="form-input"
+                  value={dbStatsClientFilter}
+                  onChange={e => {
+                    setDbStatsClientFilter(e.target.value);
+                    setDbStats(null);
+                  }}
+                >
+                  <option value="">Todos os clientes</option>
+                  {clientOptions.map(c => (
+                    <option key={c.id} value={c.email}>{c.email}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={loadDbStats}
+                disabled={dbStatsLoading}
+              >
+                {dbStatsLoading ? '⏳ Carregando...' : '🔍 Buscar'}
+              </button>
+            </div>
+
+            {/* Stats Content */}
+            {dbStatsLoading ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                Carregando estatísticas...
+              </div>
+            ) : dbStats ? (
+              <>
+                {/* Total Summary */}
+                <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f0f9ff', borderRadius: '0.5rem', border: '2px solid #3b82f6' }}>
+                  <h4 style={{ margin: '0 0 0.5rem 0', color: '#0369a1' }}>
+                    {dbStatsClientFilter ? '📊 Dados do Cliente' : '📊 Total Geral (Todos os Clientes)'}
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
+                    {dbStats.tables.map((table: string) => (
+                      <div key={table} style={{ padding: '0.75rem', background: 'white', borderRadius: '0.375rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#3b82f6' }}>
+                          {dbStats.totalStats[table] || 0}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#6b7280', textTransform: 'capitalize' }}>
+                          {table.replace(/_/g, ' ')}
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{ padding: '0.75rem', background: '#3b82f6', borderRadius: '0.375rem', textAlign: 'center' }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'white' }}>
+                        {dbStats.totalSizeMB} MB
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'white' }}>
+                        Tamanho estimado
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pie Chart + Totals */}
+                {!dbStatsClientFilter && dbStats.stats.length > 1 && (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <h4 style={{ margin: '0 0 1rem 0', color: '#4b5563' }}>📊 Tamanho do BD por Cliente (MB)</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
+                      <div style={{ padding: '1rem', background: '#f9fafb', borderRadius: '0.5rem' }}>
+                        <ResponsiveContainer width="100%" height={350}>
+                          <PieChart>
+                            <Pie
+                              data={dbStats.stats.map((s) => ({
+                                name: s.clientEmail,
+                                value: s.sizeMB
+                              })).filter(d => d.value > 0)}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name.split('@')[0]} (${(percent * 100).toFixed(0)}%)`}
+                              outerRadius={130}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {dbStats.stats.map((_entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value: number) => `${value} MB`} />
+                            <Legend
+                              formatter={(value: string) => value.length > 25 ? value.substring(0, 25) + '...' : value}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div style={{ padding: '1rem', background: '#f9fafb', borderRadius: '0.5rem' }}>
+                        <h5 style={{ margin: '0 0 0.75rem 0', color: '#4b5563' }}>📋 Totalizador</h5>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {dbStats.tables.map((table: string) => (
+                            <div key={table} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0.75rem', background: 'white', borderRadius: '0.375rem' }}>
+                              <span style={{ fontSize: '0.85rem', color: '#6b7280', textTransform: 'capitalize' }}>
+                                {table.replace(/_/g, ' ')}
+                              </span>
+                              <span style={{ fontWeight: 'bold', color: '#3b82f6' }}>
+                                {dbStats.totalStats[table] || 0}
+                              </span>
+                            </div>
+                          ))}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: '#3b82f6', borderRadius: '0.375rem', marginTop: '0.5rem' }}>
+                            <span style={{ fontWeight: 'bold', color: 'white' }}>
+                              Total registros
+                            </span>
+                            <span style={{ fontWeight: 'bold', color: 'white' }}>
+                              {dbStats.stats.reduce((acc, s) => acc + s.total, 0)}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: '#8b5cf6', borderRadius: '0.375rem' }}>
+                            <span style={{ fontWeight: 'bold', color: 'white' }}>
+                              Tamanho total
+                            </span>
+                            <span style={{ fontWeight: 'bold', color: 'white' }}>
+                              {dbStats.totalSizeMB} MB
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Per Client Stats */}
+                {!dbStatsClientFilter && (
+                  <>
+                    <h4 style={{ marginBottom: '1rem', color: '#4b5563' }}>
+                      📊 Dados por Cliente ({dbStats.stats.length})
+                    </h4>
+                    <div className="table-container">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>Cliente</th>
+                            {dbStats.tables.map((table: string) => (
+                              <th key={table} style={{ textAlign: 'center', textTransform: 'capitalize', fontSize: '0.8rem' }}>
+                                {table.replace(/_/g, ' ')}
+                              </th>
+                            ))}
+                            <th style={{ textAlign: 'center' }}>Total</th>
+                            <th style={{ textAlign: 'center' }}>Tamanho</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dbStats.stats.map((s) => (
+                            <tr key={s.clientId}>
+                              <td style={{ fontWeight: 500 }}>{s.clientEmail}</td>
+                              {dbStats.tables.map((table: string) => (
+                                <td key={table} style={{ textAlign: 'center' }}>
+                                  <span className="badge" style={{ background: s.stats[table] > 0 ? '#22c55e' : '#e5e7eb', color: s.stats[table] > 0 ? 'white' : '#6b7280' }}>
+                                    {s.stats[table] || 0}
+                                  </span>
+                                </td>
+                              ))}
+                              <td style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                                {s.total}
+                              </td>
+                              <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#3b82f6' }}>
+                                {s.sizeMB} MB
+                              </td>
+                            </tr>
+                          ))}
+                          {/* Totalizer Row */}
+                          <tr style={{ background: '#f0f9ff', borderTop: '3px solid #3b82f6' }}>
+                            <td style={{ fontWeight: 'bold', color: '#3b82f6' }}>TOTAL GERAL</td>
+                            {dbStats.tables.map((table: string) => {
+                              const total = dbStats.stats.reduce((acc, s) => acc + (s.stats[table] || 0), 0);
+                              return (
+                                <td key={table} style={{ textAlign: 'center', fontWeight: 'bold', color: '#3b82f6' }}>
+                                  {total}
+                                </td>
+                              );
+                            })}
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#3b82f6' }}>
+                              {dbStats.stats.reduce((acc, s) => acc + s.total, 0)}
+                            </td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#3b82f6' }}>
+                              {dbStats.totalSizeMB} MB
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                Clique em &quot;Buscar&quot; para carregar as estatísticas
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       {/* Edit Modal */}
       {editModal && (
         <div style={{
@@ -694,8 +959,11 @@ export function AdminPanel({ showNotification }: { showNotification: (msg: strin
             width: '100%'
           }}>
             <h4 style={{ marginBottom: '1rem' }}>✏️ Editar Usuário</h4>
-            <p style={{ marginBottom: '1rem', color: '#6b7280' }}>
+            <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>
               <strong>Email:</strong> {editModal.email}
+            </p>
+            <p style={{ marginBottom: '1rem', color: '#6b7280', fontSize: '0.85rem' }}>
+              <strong>Criado por:</strong> {editModal.createdBy || 'N/A'}
             </p>
             <div className="form-group">
               <label className="form-label">Nova Data de Validade</label>

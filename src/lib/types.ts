@@ -45,6 +45,7 @@ export interface AdminUser {
   lastLogin?: string;
   isAdmin?: boolean;
   expiresAt?: string | null;
+  createdBy?: string | null;
 }
 
 export const ADMIN_EMAILS = ['baisinextel@gmail.com'];
