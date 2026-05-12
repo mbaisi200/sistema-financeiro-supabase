@@ -594,7 +594,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     const today = now.toISOString().split('T')[0];
     
     return creditCardTransactions
-      .filter(t => t.card === cardId && t.date.startsWith(thisMonthStr) && t.date <= today)
+      .filter(t => t.card === cardId && t.date.startsWith(thisMonthStr) && t.date <= today && !t.isPayment && t.value > 0)
       .reduce((s, t) => s + t.value, 0);
   };
 

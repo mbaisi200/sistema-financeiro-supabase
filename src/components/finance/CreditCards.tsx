@@ -15,6 +15,8 @@ export function CreditCards({ showNotification }: { showNotification: (msg: stri
   const [showEmoji, setShowEmoji] = useState(false);
   const [editTx, setEditTx] = useState<any>(null);
   const [showEdit, setShowEdit] = useState(false);
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [editCardForm, setEditCardForm] = useState({ name: '', bank: '', limit: '', icon: '💳' });
   const descriptionRef = useRef<HTMLInputElement>(null);
 
   const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -89,6 +91,27 @@ export function CreditCards({ showNotification }: { showNotification: (msg: stri
       await deleteCreditCard(id);
       showNotification('Excluído!', 'success');
     }
+  };
+
+  const handleStartEdit = (c: { id: string; name: string; bank: string; limit: number; icon: string }) => {
+    setEditingCardId(c.id);
+    setEditCardForm({ name: c.name, bank: c.bank, limit: c.limit.toString(), icon: c.icon });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingCardId) return;
+    await updateCreditCard(editingCardId, {
+      name: toUpperCase(editCardForm.name),
+      bank: editCardForm.bank,
+      limit: parseFloat(editCardForm.limit),
+      icon: editCardForm.icon
+    });
+    showNotification('Cartão atualizado!', 'success');
+    setEditingCardId(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCardId(null);
   };
 
   return (
@@ -172,6 +195,64 @@ export function CreditCards({ showNotification }: { showNotification: (msg: stri
         </div>
       </div>
 
+      {/* Cards Grid */}
+      <div className="cards-grid">
+        {creditCards.map(c => {
+          const totalDebt = getCardTotalDebt(c.id);
+          const positiveDebt = Math.max(0, totalDebt);
+          const available = Math.max(0, c.limit - positiveDebt);
+          const isEditing = editingCardId === c.id;
+          return (
+            <div key={c.id} className="card-item">
+              {isEditing ? (
+                <>
+                  <div className="form-grid" style={{ marginBottom: '0.75rem' }}>
+                    <div className="form-group">
+                      <label className="form-label">Nome</label>
+                      <input type="text" className="form-input uppercase" value={editCardForm.name} onChange={e => setEditCardForm({...editCardForm, name: e.target.value})} onBlur={e => setEditCardForm({...editCardForm, name: toUpperCase(e.target.value)})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Banco</label>
+                      <select className="form-select" value={editCardForm.bank} onChange={e => setEditCardForm({...editCardForm, bank: e.target.value})}>
+                        <option value="">Selecione</option>
+                        {banks.map(b => <option key={b.id} value={b.id}>{b.icon} {b.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Limite</label>
+                      <input type="number" step="0.01" className="form-input" value={editCardForm.limit} onChange={e => setEditCardForm({...editCardForm, limit: e.target.value})} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn btn-sm btn-primary" onClick={handleSaveEdit}>Salvar</button>
+                    <button className="btn btn-sm btn-secondary" onClick={handleCancelEdit}>Cancelar</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                    <div style={{ fontSize: '2rem' }}>{c.icon}</div>
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{c.name}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#4b5563' }}>🏦 {getBankName(c.bank)}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem' }}>
+                    <div>Dívida: <strong>{fmt(Math.max(0, totalDebt))}</strong></div>
+                    <div>Limite: <strong>{fmt(c.limit)}</strong></div>
+                    <div>Disponível: <strong style={{ color: available < 0 ? '#ef4444' : '#10b981' }}>{fmt(available)}</strong></div>
+                  </div>
+                  <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn btn-sm btn-secondary" onClick={() => handleStartEdit(c)}>Editar</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDeleteCard(c.id)}>Excluir</button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       {/* Filters & List */}
       <div className="card">
         <div className="filter-bar">
@@ -230,34 +311,6 @@ export function CreditCards({ showNotification }: { showNotification: (msg: stri
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* Cards Grid */}
-      <div className="cards-grid">
-        {creditCards.map(c => {
-          const invoice = getCardInvoice(c.id);
-          const totalDebt = getCardTotalDebt(c.id);
-          const available = c.limit - totalDebt;
-          return (
-            <div key={c.id} className="card-item">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <div style={{ fontSize: '2rem' }}>{c.icon}</div>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{c.name}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#4b5563' }}>🏦 {getBankName(c.bank)}</div>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem' }}>
-                <div>Fatura: <strong>{fmt(invoice)}</strong></div>
-                <div>Limite: <strong>{fmt(c.limit)}</strong></div>
-                <div>Disponível: <strong style={{ color: available < 0 ? '#ef4444' : '#10b981' }}>{fmt(available)}</strong></div>
-              </div>
-              <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
-                <button className="btn btn-sm btn-danger" onClick={() => handleDeleteCard(c.id)}>Excluir</button>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
       {/* Edit Modal */}
