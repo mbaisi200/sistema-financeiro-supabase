@@ -800,7 +800,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
    };
 
    const updateCreditCardTransaction = async (id: string, transaction: Partial<CreditCardTransaction>) => {
-     if (!user) return;
+     if (!user) {
+       throw new Error('Usuário não está logado');
+     }
+     
      const updateData: Record<string, unknown> = {};
      if (transaction.date !== undefined) updateData.date = transaction.date;
      if (transaction.description !== undefined) updateData.description = transaction.description;
@@ -810,8 +813,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
      if (transaction.isPayment !== undefined) updateData.is_payment = transaction.isPayment;
      if (transaction.invoice_month !== undefined) updateData.invoice_month = transaction.invoice_month;
      
-     const { error } = await supabase.from('credit_card_transactions').update(updateData).eq('id', id);
-     if (error) throw error;
+     const { error } = await supabase
+       .from('credit_card_transactions')
+       .update(updateData)
+       .eq('id', id);
+     
+     if (error) {
+       throw error;
+     }
+     
      setCreditCardTransactions(prev => prev.map(t => t.id === id ? { ...t, ...transaction } : t));
    };
 

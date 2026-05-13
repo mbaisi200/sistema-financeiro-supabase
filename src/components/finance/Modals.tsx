@@ -257,10 +257,11 @@ export function EditCreditCardTransactionModal({
       });
       showNotification('Transação atualizada!', 'success');
       onClose();
-    } catch (error) {
-      showNotification('Erro ao atualizar', 'error');
+    } catch (error: any) {
+      showNotification('Erro ao atualizar: ' + (error.message || 'Erro desconhecido'), 'error');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   if (!isOpen || !transaction) return null;
