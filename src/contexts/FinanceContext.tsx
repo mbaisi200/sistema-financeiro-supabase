@@ -5,56 +5,68 @@ import { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { Bank, Category, CreditCard, Transaction, CreditCardTransaction, ScheduledTransaction, DEFAULT_BANKS, DEFAULT_CATEGORIES, ADMIN_EMAILS } from '@/lib/types';
 
-interface FinanceContextType {
-  user: User | null;
-  loading: boolean;
-  isOnline: boolean;
-  isExpired: boolean;
-  expiresAt: string | null;
-  banks: Bank[];
-  categories: Category[];
-  creditCards: CreditCard[];
-  transactions: Transaction[];
-  creditCardTransactions: CreditCardTransaction[];
-  scheduledTransactions: ScheduledTransaction[];
-  scheduledTransactionsTableExists: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  changePassword: (newPassword: string) => Promise<void>;
-  addBank: (bank: Omit<Bank, 'id'>) => Promise<void>;
-  updateBank: (id: string, bank: Partial<Bank>) => Promise<void>;
-  deleteBank: (id: string) => Promise<void>;
-  getBankBalance: (bankId: string) => number;
-  addCategory: (category: Omit<Category, 'id'>) => Promise<void>;
-  updateCategory: (id: string, category: Partial<Category>) => Promise<void>;
-  deleteCategory: (id: string) => Promise<void>;
-  addCreditCard: (card: Omit<CreditCard, 'id'>) => Promise<void>;
-  updateCreditCard: (id: string, card: Partial<CreditCard>) => Promise<void>;
-  deleteCreditCard: (id: string) => Promise<void>;
-  getCardInvoice: (cardId: string) => number;
-  getCardTotalDebt: (cardId: string) => number;
-  addTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
-  updateTransaction: (id: string, transaction: Partial<Transaction>) => Promise<void>;
-  deleteTransaction: (id: string) => Promise<void>;
-  addCreditCardTransaction: (transaction: Omit<CreditCardTransaction, 'id'>) => Promise<void>;
-  updateCreditCardTransaction: (id: string, transaction: Partial<CreditCardTransaction>) => Promise<void>;
-  deleteCreditCardTransaction: (id: string) => Promise<void>;
-  payCardInvoice: (cardId: string, bankId: string, value: number, date: string) => Promise<void>;
-  loadScheduledTransactions: () => Promise<void>;
-  addScheduledTransaction: (transaction: Omit<ScheduledTransaction, 'id'>) => Promise<ScheduledTransaction | null>;
-  updateScheduledTransaction: (id: string, transaction: Partial<ScheduledTransaction>) => Promise<void>;
-  deleteScheduledTransaction: (id: string) => Promise<void>;
-  confirmScheduledTransaction: (id: string, confirmedValue?: number, confirmedDate?: string, useCreditCard?: boolean) => Promise<void>;
-  getCategoryName: (id: string) => string;
-  getCategoryIcon: (id: string) => string;
-  getBankName: (id: string) => string;
-  getBankIcon: (id: string) => string;
-  getCardName: (id: string) => string;
-  getCardIcon: (id: string) => string;
-  exportToCSV: () => string;
-  exportToJSON: () => string;
+export interface DescriptionMapping {
+  description: string;
+  categoryId: string;
+  usageCount: number;
 }
+
+interface FinanceContextType {
+   user: User | null;
+   loading: boolean;
+   isOnline: boolean;
+   isExpired: boolean;
+   expiresAt: string | null;
+   banks: Bank[];
+   categories: Category[];
+   creditCards: CreditCard[];
+   transactions: Transaction[];
+   creditCardTransactions: CreditCardTransaction[];
+   scheduledTransactions: ScheduledTransaction[];
+   scheduledTransactionsTableExists: boolean;
+   descriptionMappings: Map<string, string>;
+   descriptionMappingsTableExists: boolean;
+   login: (email: string, password: string) => Promise<void>;
+   register: (email: string, password: string) => Promise<void>;
+   logout: () => Promise<void>;
+   changePassword: (newPassword: string) => Promise<void>;
+   addBank: (bank: Omit<Bank, 'id'>) => Promise<void>;
+   updateBank: (id: string, bank: Partial<Bank>) => Promise<void>;
+   deleteBank: (id: string) => Promise<void>;
+   getBankBalance: (bankId: string) => number;
+   addCategory: (category: Omit<Category, 'id'>) => Promise<void>;
+   updateCategory: (id: string, category: Partial<Category>) => Promise<void>;
+   deleteCategory: (id: string) => Promise<void>;
+   addCreditCard: (card: Omit<CreditCard, 'id'>) => Promise<void>;
+   updateCreditCard: (id: string, card: Partial<CreditCard>) => Promise<void>;
+   deleteCreditCard: (id: string) => Promise<void>;
+   getCardInvoice: (cardId: string) => number;
+   getCardTotalDebt: (cardId: string) => number;
+   addTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
+   updateTransaction: (id: string, transaction: Partial<Transaction>) => Promise<void>;
+   deleteTransaction: (id: string) => Promise<void>;
+    addCreditCardTransaction: (transaction: Omit<CreditCardTransaction, 'id'>) => Promise<void>;
+    bulkAddCreditCardTransactions: (transactions: Omit<CreditCardTransaction, 'id'>[]) => Promise<number>;
+    reloadCreditCardTransactions: () => Promise<void>;
+    updateCreditCardTransaction: (id: string, transaction: Partial<CreditCardTransaction>) => Promise<void>;
+    deleteCreditCardTransaction: (id: string) => Promise<void>;
+   payCardInvoice: (cardId: string, bankId: string, value: number, date: string) => Promise<void>;
+   loadScheduledTransactions: () => Promise<void>;
+   addScheduledTransaction: (transaction: Omit<ScheduledTransaction, 'id'>) => Promise<ScheduledTransaction | null>;
+   updateScheduledTransaction: (id: string, transaction: Partial<ScheduledTransaction>) => Promise<void>;
+   deleteScheduledTransaction: (id: string) => Promise<void>;
+   confirmScheduledTransaction: (id: string, confirmedValue?: number, confirmedDate?: string, useCreditCard?: boolean) => Promise<void>;
+   getCategoryName: (id: string) => string;
+   getCategoryIcon: (id: string) => string;
+   getBankName: (id: string) => string;
+   getBankIcon: (id: string) => string;
+   getCardName: (id: string) => string;
+   getCardIcon: (id: string) => string;
+   exportToCSV: () => string;
+   exportToJSON: () => string;
+   saveDescriptionMapping: (description: string, categoryId: string) => Promise<void>;
+   getCategoryForDescription: (description: string) => string | undefined;
+ }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
@@ -69,10 +81,12 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [creditCardTransactions, setCreditCardTransactions] = useState<CreditCardTransaction[]>([]);
-  const [scheduledTransactions, setScheduledTransactions] = useState<ScheduledTransaction[]>([]);
-  const [scheduledTransactionsTableExists, setScheduledTransactionsTableExists] = useState<boolean>(true);
-  
-  // Refs para evitar loops
+   const [scheduledTransactions, setScheduledTransactions] = useState<ScheduledTransaction[]>([]);
+   const [scheduledTransactionsTableExists, setScheduledTransactionsTableExists] = useState<boolean>(true);
+   const [descriptionMappings, setDescriptionMappings] = useState<Map<string, string>>(new Map());
+   const [descriptionMappingsTableExists, setDescriptionMappingsTableExists] = useState<boolean>(true);
+   
+   // Refs para evitar loops
   const initializingRef = useRef(false);
   const lastUserIdRef = useRef<string | null>(null);
   const lastEventRef = useRef<string | null>(null); // Rastrear último evento para evitar duplicados
@@ -205,47 +219,73 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
           card: t.card,
           category: t.category,
           value: t.value,
-          isPayment: t.is_payment
+          isPayment: t.is_payment,
+          invoice_month: t.invoice_month
         })));
       }
 
-      // Carregar lançamentos futuros
-      const { data: scheduledData, error: scheduledError } = await supabase
-        .from('scheduled_transactions')
-        .select('*')
-        .eq('user_id', uid)
-        .order('due_date', { ascending: true });
-      
-      if (scheduledError) {
-        if (scheduledError.message.includes('does not exist') || scheduledError.message.includes('relation')) {
-          setScheduledTransactionsTableExists(false);
-          setScheduledTransactions([]);
-        } else {
-          console.error('Erro ao carregar lançamentos futuros:', scheduledError);
-        }
-      } else if (scheduledData) {
-        setScheduledTransactionsTableExists(true);
-        setScheduledTransactions(scheduledData.map(t => ({
-          id: t.id,
-          description: t.description,
-          type: t.type,
-          transactionType: t.transaction_type || 'debit',
-          value: parseFloat(t.value),
-          totalInstallments: t.total_installments,
-          currentInstallment: t.current_installment,
-          dueDate: t.due_date,
-          category: t.category || '',
-          bank: t.bank || '',
-          card: t.card || '',
-          isPaid: t.is_paid,
-          autoConfirm: t.auto_confirm,
-          status: t.status
-        })));
-      }
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-    }
-  }, []);
+       // Carregar lançamentos futuros
+       const { data: scheduledData, error: scheduledError } = await supabase
+         .from('scheduled_transactions')
+         .select('*')
+         .eq('user_id', uid)
+         .order('due_date', { ascending: true });
+       
+       if (scheduledError) {
+         if (scheduledError.message.includes('does not exist') || scheduledError.message.includes('relation')) {
+           setScheduledTransactionsTableExists(false);
+           setScheduledTransactions([]);
+         } else {
+           console.error('Erro ao carregar lançamentos futuros:', scheduledError);
+         }
+       } else if (scheduledData) {
+         setScheduledTransactionsTableExists(true);
+         setScheduledTransactions(scheduledData.map(t => ({
+           id: t.id,
+           description: t.description,
+           type: t.type,
+           transactionType: t.transaction_type || 'debit',
+           value: parseFloat(t.value),
+           totalInstallments: t.total_installments,
+           currentInstallment: t.current_installment,
+           dueDate: t.due_date,
+           category: t.category || '',
+           bank: t.bank || '',
+           card: t.card || '',
+           isPaid: t.is_paid,
+           autoConfirm: t.auto_confirm,
+           status: t.status
+         })));
+       }
+
+       // Carregar mapeamentos de descrição -> categoria
+       const { data: mappingsData, error: mappingsError } = await supabase
+         .from('description_category_mappings')
+         .select('*')
+         .eq('user_id', uid)
+         .order('usage_count', { ascending: false });
+       
+       if (mappingsError) {
+         if (mappingsError.message.includes('does not exist') || mappingsError.message.includes('relation')) {
+           console.log('⚠️ Tabela description_category_mappings ainda não existe');
+           setDescriptionMappingsTableExists(false);
+           setDescriptionMappings(new Map());
+         } else {
+           console.error('Erro ao carregar mapeamentos:', mappingsError);
+         }
+       } else if (mappingsData) {
+         setDescriptionMappingsTableExists(true);
+         const mappings = new Map<string, string>();
+         mappingsData.forEach(m => {
+           mappings.set(m.description.toUpperCase(), m.category_id);
+         });
+         console.log(`📋 Carregados ${mappings.size} mapeamentos de descrição -> categoria`);
+         setDescriptionMappings(mappings);
+       }
+     } catch (error) {
+       console.error('Erro ao carregar dados:', error);
+     }
+   }, []);
 
   // Inicializar dados padrão para novo usuário
   const initDefaultData = async (uid: string) => {
@@ -658,43 +698,122 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   // Credit Card Transaction functions
   const addCreditCardTransaction = async (transaction: Omit<CreditCardTransaction, 'id'>) => {
     if (!user) return;
-    const { data, error } = await supabase.from('credit_card_transactions').insert({
-      user_id: user.id,
-      date: transaction.date,
-      description: transaction.description,
-      card: transaction.card,
-      category: transaction.category,
-      value: transaction.value,
-      is_payment: transaction.isPayment
-    }).select().single();
-    if (error) throw error;
-    if (data) {
-      setCreditCardTransactions(prev => [{
-        id: data.id,
-        date: data.date,
-        description: data.description,
-        card: data.card,
-        category: data.category,
-        value: data.value,
-        isPayment: data.is_payment
-      }, ...prev]);
-    }
-  };
+     const { data, error } = await supabase.from('credit_card_transactions').insert({
+       user_id: user.id,
+       date: transaction.date,
+       description: transaction.description,
+       card: transaction.card,
+       category: transaction.category,
+       value: transaction.value,
+       is_payment: transaction.isPayment,
+       invoice_month: transaction.invoice_month
+     }).select().single();
+     if (error) throw error;
+     if (data) {
+       setCreditCardTransactions(prev => [{
+         id: data.id,
+         date: data.date,
+         description: data.description,
+         card: data.card,
+         category: data.category,
+         value: data.value,
+         isPayment: data.is_payment,
+         invoice_month: data.invoice_month
+       }, ...prev]);
+     }
+   };
 
-  const updateCreditCardTransaction = async (id: string, transaction: Partial<CreditCardTransaction>) => {
-    if (!user) return;
-    const updateData: Record<string, unknown> = {};
-    if (transaction.date !== undefined) updateData.date = transaction.date;
-    if (transaction.description !== undefined) updateData.description = transaction.description;
-    if (transaction.card !== undefined) updateData.card = transaction.card;
-    if (transaction.category !== undefined) updateData.category = transaction.category;
-    if (transaction.value !== undefined) updateData.value = transaction.value;
-    if (transaction.isPayment !== undefined) updateData.is_payment = transaction.isPayment;
+   const bulkAddCreditCardTransactions = async (transactions: Omit<CreditCardTransaction, 'id'>[]): Promise<number> => {
+     if (!user || transactions.length === 0) return 0;
+     
+     const records = transactions.map(tx => ({
+       user_id: user.id,
+       date: tx.date,
+       description: tx.description,
+       card: tx.card,
+       category: tx.category,
+       value: tx.value,
+       is_payment: tx.isPayment,
+       invoice_month: tx.invoice_month
+     }));
     
-    const { error } = await supabase.from('credit_card_transactions').update(updateData).eq('id', id);
-    if (error) throw error;
-    setCreditCardTransactions(prev => prev.map(t => t.id === id ? { ...t, ...transaction } : t));
-  };
+    const BATCH_SIZE = 100;
+    let totalInserted = 0;
+    
+    for (let i = 0; i < records.length; i += BATCH_SIZE) {
+      const batch = records.slice(i, i + BATCH_SIZE);
+      const { data, error } = await supabase
+        .from('credit_card_transactions')
+        .insert(batch)
+        .select();
+      
+      if (error) {
+        console.error(`Erro no bulk insert lote ${Math.floor(i/BATCH_SIZE) + 1}:`, error);
+        throw error;
+      }
+      
+       if (data && data.length > 0) {
+         totalInserted += data.length;
+         const newTransactions = data.map(t => ({
+           id: t.id,
+           date: t.date,
+           description: t.description,
+           card: t.card,
+           category: t.category,
+           value: t.value,
+           isPayment: t.is_payment,
+           invoice_month: t.invoice_month
+         }));
+         setCreditCardTransactions(prev => [...newTransactions, ...prev]);
+       }
+     }
+     
+     return totalInserted;
+   };
+
+   const reloadCreditCardTransactions = async () => {
+     if (!user) return;
+     
+     const { data, error } = await supabase
+       .from('credit_card_transactions')
+       .select('*')
+       .eq('user_id', user.id)
+       .order('created_at', { ascending: false });
+     
+     if (error) {
+       console.error('Erro ao recarregar transações de cartão:', error);
+       throw error;
+     }
+     
+     if (data) {
+       setCreditCardTransactions(data.map(t => ({
+         id: t.id,
+         date: t.date,
+         description: t.description,
+         card: t.card,
+         category: t.category,
+         value: t.value,
+         isPayment: t.is_payment,
+         invoice_month: t.invoice_month
+       })));
+     }
+   };
+
+   const updateCreditCardTransaction = async (id: string, transaction: Partial<CreditCardTransaction>) => {
+     if (!user) return;
+     const updateData: Record<string, unknown> = {};
+     if (transaction.date !== undefined) updateData.date = transaction.date;
+     if (transaction.description !== undefined) updateData.description = transaction.description;
+     if (transaction.card !== undefined) updateData.card = transaction.card;
+     if (transaction.category !== undefined) updateData.category = transaction.category;
+     if (transaction.value !== undefined) updateData.value = transaction.value;
+     if (transaction.isPayment !== undefined) updateData.is_payment = transaction.isPayment;
+     if (transaction.invoice_month !== undefined) updateData.invoice_month = transaction.invoice_month;
+     
+     const { error } = await supabase.from('credit_card_transactions').update(updateData).eq('id', id);
+     if (error) throw error;
+     setCreditCardTransactions(prev => prev.map(t => t.id === id ? { ...t, ...transaction } : t));
+   };
 
   const deleteCreditCardTransaction = async (id: string) => {
     if (!user) throw new Error('Usuário não está logado');
@@ -711,9 +830,15 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   // Pay card invoice
   const payCardInvoice = async (cardId: string, bankId: string, value: number, date: string) => {
-    if (!user) return;
+    if (!user) {
+      console.error('❌ payCardInvoice: Usuário não logado');
+      throw new Error('Usuário não logado');
+    }
     
-    const { error: error1 } = await supabase.from('transactions').insert({
+    console.log('💳 Iniciando pagamento de fatura:', { cardId, bankId, value, date });
+
+    // Create bank transaction (money leaving bank)
+    const { data: txData, error: error1 } = await supabase.from('transactions').insert({
       user_id: user.id,
       date,
       description: 'Pagamento Fatura',
@@ -721,21 +846,35 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       type: 'debit',
       category: 'pagamento_cartao',
       value
-    });
-    if (error1) throw error1;
+    }).select().single();
+    
+    if (error1) {
+      console.error('❌ Erro ao criar transação no banco:', error1);
+      throw error1;
+    }
+    console.log('✅ Transação do banco criada:', txData);
 
-    const { error: error2 } = await supabase.from('credit_card_transactions').insert({
+    // Create credit card transaction (negative value = payment, reduces card debt)
+    const { data: ccData, error: error2 } = await supabase.from('credit_card_transactions').insert({
       user_id: user.id,
       date,
       description: 'Pagamento Fatura',
       card: cardId,
       category: 'pagamento_cartao',
       value: -value,
-      is_payment: true
-    });
-    if (error2) throw error2;
+      is_payment: true,
+      invoice_month: date.substring(0, 7)
+    }).select().single();
     
+    if (error2) {
+      console.error('❌ Erro ao criar transação no cartão:', error2);
+      throw error2;
+    }
+    console.log('✅ Transação do cartão criada:', ccData);
+    
+    console.log('🔄 Recarregando dados do usuário...');
     await loadUserData(user.id);
+    console.log('✅ Pagamento de fatura CONCLUÍDO!');
   };
 
   // Scheduled Transactions functions
@@ -963,34 +1102,92 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     await updateScheduledTransaction(id, updateData);
   };
 
-  // Helper functions
-  const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || id;
-  const getCategoryIcon = (id: string) => categories.find(c => c.id === id)?.icon || '📦';
-  const getBankName = (id: string) => banks.find(b => b.id === id)?.name || id;
-  const getBankIcon = (id: string) => banks.find(b => b.id === id)?.icon || '🏦';
-  const getCardName = (id: string) => creditCards.find(c => c.id === id)?.name || id;
-  const getCardIcon = (id: string) => creditCards.find(c => c.id === id)?.icon || '💳';
+   // Helper functions
+   const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || id;
+   const getCategoryIcon = (id: string) => categories.find(c => c.id === id)?.icon || '📦';
+   const getBankName = (id: string) => banks.find(b => b.id === id)?.name || id;
+   const getBankIcon = (id: string) => banks.find(b => b.id === id)?.icon || '🏦';
+   const getCardName = (id: string) => creditCards.find(c => c.id === id)?.name || id;
+   const getCardIcon = (id: string) => creditCards.find(c => c.id === id)?.icon || '💳';
 
-  // Export functions
-  const exportToCSV = () => 'Data,Descricao,Banco,Tipo,Categoria,Valor\n' + transactions.map(t => `${t.date},${t.description},${getBankName(t.bank)},${t.type},${getCategoryName(t.category)},${t.value}`).join('\n');
-  const exportToJSON = () => JSON.stringify({ transactions, banks, categories, creditCards, creditCardTransactions }, null, 2);
+   // Mapeamento de descrição -> categoria
+   const getCategoryForDescription = (description: string): string | undefined => {
+     return descriptionMappings.get(description.toUpperCase());
+   };
 
-  return (
-    <FinanceContext.Provider value={{ 
-      user, loading, isOnline, isExpired, expiresAt,
-      banks, categories, creditCards, transactions, creditCardTransactions, 
-      scheduledTransactions, scheduledTransactionsTableExists,
-      login, register, logout, changePassword, 
-      addBank, updateBank, deleteBank, getBankBalance, 
-      addCategory, updateCategory, deleteCategory, 
-      addCreditCard, updateCreditCard, deleteCreditCard, getCardInvoice, getCardTotalDebt, 
-      addTransaction, updateTransaction, deleteTransaction, 
-      addCreditCardTransaction, updateCreditCardTransaction, deleteCreditCardTransaction, 
-      payCardInvoice, loadScheduledTransactions, addScheduledTransaction, updateScheduledTransaction, 
-      deleteScheduledTransaction, confirmScheduledTransaction,
-      getCategoryName, getCategoryIcon, getBankName, getBankIcon, getCardName, getCardIcon, 
-      exportToCSV, exportToJSON 
-    }}>
+   const saveDescriptionMapping = async (description: string, categoryId: string) => {
+     if (!user) return;
+     
+     const upperDesc = description.toUpperCase();
+     
+     console.log(`💾 Salvando mapeamento: "${upperDesc}" -> categoria ${categoryId}`);
+     
+     const { data: existing } = await supabase
+       .from('description_category_mappings')
+       .select('*')
+       .eq('user_id', user.id)
+       .eq('description', upperDesc)
+       .maybeSingle();
+     
+     if (existing) {
+       const { error } = await supabase
+         .from('description_category_mappings')
+         .update({
+           category_id: categoryId,
+           usage_count: existing.usage_count + 1,
+           updated_at: new Date().toISOString()
+         })
+         .eq('id', existing.id);
+       
+       if (!error) {
+         setDescriptionMappings(prev => {
+           const updated = new Map(prev);
+           updated.set(upperDesc, categoryId);
+           return updated;
+         });
+       }
+     } else {
+       const { error } = await supabase
+         .from('description_category_mappings')
+         .insert({
+           user_id: user.id,
+           description: upperDesc,
+           category_id: categoryId,
+           usage_count: 1
+         });
+       
+       if (!error) {
+         setDescriptionMappings(prev => {
+           const updated = new Map(prev);
+           updated.set(upperDesc, categoryId);
+           return updated;
+         });
+       }
+     }
+   };
+
+   // Export functions
+   const exportToCSV = () => 'Data,Descricao,Banco,Tipo,Categoria,Valor\n' + transactions.map(t => `${t.date},${t.description},${getBankName(t.bank)},${t.type},${getCategoryName(t.category)},${t.value}`).join('\n');
+   const exportToJSON = () => JSON.stringify({ transactions, banks, categories, creditCards, creditCardTransactions }, null, 2);
+
+   return (
+     <FinanceContext.Provider value={{ 
+       user, loading, isOnline, isExpired, expiresAt,
+       banks, categories, creditCards, transactions, creditCardTransactions, 
+       scheduledTransactions, scheduledTransactionsTableExists,
+       descriptionMappings, descriptionMappingsTableExists,
+       login, register, logout, changePassword, 
+       addBank, updateBank, deleteBank, getBankBalance, 
+       addCategory, updateCategory, deleteCategory, 
+       addCreditCard, updateCreditCard, deleteCreditCard, getCardInvoice, getCardTotalDebt, 
+       addTransaction, updateTransaction, deleteTransaction, 
+        addCreditCardTransaction, bulkAddCreditCardTransactions, reloadCreditCardTransactions, updateCreditCardTransaction, deleteCreditCardTransaction,
+       payCardInvoice, loadScheduledTransactions, addScheduledTransaction, updateScheduledTransaction, 
+       deleteScheduledTransaction, confirmScheduledTransaction,
+       getCategoryName, getCategoryIcon, getBankName, getBankIcon, getCardName, getCardIcon, 
+       exportToCSV, exportToJSON,
+       saveDescriptionMapping, getCategoryForDescription
+     }}>
       {children}
     </FinanceContext.Provider>
   );

@@ -423,9 +423,28 @@ function PaymentForm({ banks, creditCards, showNotification }: { banks: any[], c
       showNotification('Preencha todos os campos!', 'error');
       return;
     }
-    await payCardInvoice(form.card, form.bank, parseFloat(form.value), form.date);
-    showNotification('Pagamento realizado!', 'success');
-    setForm({ date: new Date().toISOString().split('T')[0], bank: '', card: '', value: '' });
+    
+    const valueNum = parseFloat(form.value);
+    if (isNaN(valueNum) || valueNum <= 0) {
+      showNotification('Valor inválido!', 'error');
+      return;
+    }
+    
+    console.log('💳 Clicou em Pagar Fatura:', {
+      date: form.date,
+      bank: form.bank,
+      card: form.card,
+      value: valueNum
+    });
+    
+    try {
+      await payCardInvoice(form.card, form.bank, valueNum, form.date);
+      showNotification('Pagamento realizado!', 'success');
+      setForm({ date: new Date().toISOString().split('T')[0], bank: '', card: '', value: '' });
+    } catch (error: any) {
+      console.error('❌ Erro ao pagar fatura:', error);
+      showNotification('Erro: ' + (error.message || 'Erro desconhecido'), 'error');
+    }
   };
 
   return (

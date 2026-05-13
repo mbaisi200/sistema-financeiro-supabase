@@ -197,35 +197,64 @@ export interface Database {
           created_at?: string;
         };
       };
-      pending_users: {
-        Row: {
-          id: string;
-          email: string;
-          created_by: string | null;
-          expires_at: string | null;
-          default_banks: Json | null;
-          default_categories: Json | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          email: string;
-          created_by?: string | null;
-          expires_at?: string | null;
-          default_banks?: Json | null;
-          default_categories?: Json | null;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          email?: string;
-          created_by?: string | null;
-          expires_at?: string | null;
-          default_banks?: Json | null;
-          default_categories?: Json | null;
-          created_at?: string;
-        };
-      };
-    };
-  };
-}
+       pending_users: {
+         Row: {
+           id: string;
+           email: string;
+           created_by: string | null;
+           expires_at: string | null;
+           default_banks: Json | null;
+           default_categories: Json | null;
+           created_at: string;
+         };
+         Insert: {
+           id?: string;
+           email: string;
+           created_by?: string | null;
+           expires_at?: string | null;
+           default_banks?: Json | null;
+           default_categories?: Json | null;
+           created_at?: string;
+         };
+         Update: {
+           id?: string;
+           email?: string;
+           created_by?: string | null;
+           expires_at?: string | null;
+           default_banks?: Json | null;
+           default_categories?: Json | null;
+           created_at?: string;
+         };
+       };
+       description_category_mappings: {
+         Row: {
+           id: string;
+           user_id: string;
+           description: string;
+           category_id: string;
+           usage_count: number;
+           created_at: string;
+           updated_at: string;
+         };
+         Insert: {
+           id?: string;
+           user_id: string;
+           description: string;
+           category_id: string;
+           usage_count?: number;
+           created_at?: string;
+           updated_at?: string;
+         };
+         Update: {
+           id?: string;
+           user_id?: string;
+           description?: string;
+           category_id?: string;
+           usage_count?: number;
+           created_at?: string;
+           updated_at?: string;
+         };
+       };
+     };
+   };
+ }

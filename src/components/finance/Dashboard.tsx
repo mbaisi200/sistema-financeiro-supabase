@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
 import { Card } from '@/components/ui/card';
+import { getInvoiceMonth, isInInvoiceMonth } from '@/lib/types';
 
 interface CategoryReport {
   categoryId: string;
@@ -27,23 +28,43 @@ export function Dashboard() {
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
-  const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-  const fmtDate = (d: string) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '';
+   const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+   const fmtDate = (d: string) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '';
 
-  const thisMonthStr = thisMonthStart.toISOString().split('T')[0];
-  const nowStr = now.toISOString().split('T')[0];
-  const lastMonthStartStr = lastMonthStart.toISOString().split('T')[0];
-  const lastMonthEndStr = lastMonthEnd.toISOString().split('T')[0];
-  const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+   const thisMonthStr = thisMonthStart.toISOString().split('T')[0];
+   const nowStr = now.toISOString().split('T')[0];
+   const lastMonthStartStr = lastMonthStart.toISOString().split('T')[0];
+   const lastMonthEndStr = lastMonthEnd.toISOString().split('T')[0];
+   const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+   
+   const thisMonthYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+   const lastMonthYearMonth = lastMonthStart.getMonth() < 0 
+     ? `${now.getFullYear() - 1}-12` 
+     : `${now.getFullYear()}-${String(now.getMonth()).padStart(2, '0')}`;
+   
+   const getPeriodInvoiceMonth = (): string | null => {
+     if (filterPeriod === 'thisMonth') return thisMonthYearMonth;
+     if (filterPeriod === 'lastMonth') return lastMonthYearMonth;
+     return null;
+   };
+   
+   const cardDueDayMap = new Map<string, number | null | undefined>();
+   creditCards.forEach(card => {
+     cardDueDayMap.set(card.id, card.due_day);
+   });
+   
+   const getCardDueDay = (cardId: string): number | null | undefined => {
+     return cardDueDayMap.get(cardId);
+   };
 
-  // Helper para obter o range de datas do período selecionado
-  // IMPORTANTE: para gráficos de projeção, usa o fim do mês (não só até hoje)
-  const getPeriodRange = () => {
-    if (filterPeriod === 'thisMonth') return { start: thisMonthStr, end: thisMonthEnd };
-    if (filterPeriod === 'lastMonth') return { start: lastMonthStartStr, end: lastMonthEndStr };
-    if (filterPeriod === 'custom' && customStartDate && customEndDate) return { start: customStartDate, end: customEndDate };
-    return null; // Histórico completo
-  };
+   // Helper para obter o range de datas do período selecionado
+   // IMPORTANTE: para gráficos de projeção, usa o fim do mês (não só até hoje)
+   const getPeriodRange = () => {
+     if (filterPeriod === 'thisMonth') return { start: thisMonthStr, end: thisMonthEnd };
+     if (filterPeriod === 'lastMonth') return { start: lastMonthStartStr, end: lastMonthEndStr };
+     if (filterPeriod === 'custom' && customStartDate && customEndDate) return { start: customStartDate, end: customEndDate };
+     return null; // Histórico completo
+   };
 
   const periodRange = getPeriodRange();
 
@@ -144,10 +165,27 @@ export function Dashboard() {
   // Pagamentos de cartão INCLUINDO agendados
   const totalCardPaymentsWithScheduled = cardPayments + scheduledCardPaymentsTotal;
   
-  // Filter credit card transactions by period
-  const ccFiltered = creditCardTransactions.filter(t => {
-    return isInPeriod(t.date);
-  });
+    const periodInvoiceMonth = getPeriodInvoiceMonth();
+    
+    // Filter credit card transactions by INVOICE MONTH (not purchase date)
+    // Priority:
+    // 1. Use t.invoice_month if defined (for newly imported transactions)
+    // 2. Fall back to calculated invoice month based on date + due_day (for old transactions)
+    const getTxInvoiceMonth = (t: any): string => {
+      if (t.invoice_month) {
+        return t.invoice_month;
+      }
+      const cardDueDay = getCardDueDay(t.card);
+      return getInvoiceMonth(t.date, cardDueDay);
+    };
+    
+    const ccFiltered = creditCardTransactions.filter(t => {
+      if (!periodInvoiceMonth) {
+        return true;
+      }
+      const txInvoiceMonth = getTxInvoiceMonth(t);
+      return txInvoiceMonth === periodInvoiceMonth;
+    });
 
   // ========================================
   // CÁLCULOS DO CARTÃO DE CRÉDITO (SIMPLIFICADO)

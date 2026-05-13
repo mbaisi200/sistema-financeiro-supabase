@@ -5,9 +5,10 @@ import { useFinance } from '@/contexts/FinanceContext';
 import { EMOJI_LIST, toUpperCase } from '@/lib/types';
 import { EditCreditCardTransactionModal } from './Modals';
 import { SearchableSelect } from './SearchableSelect';
+import { ImportCsvModal } from './ImportCsvModal';
 
 export function CreditCards({ showNotification }: { showNotification: (msg: string, type: 'success' | 'error') => void }) {
-  const { creditCards, banks, categories, creditCardTransactions, addCreditCard, updateCreditCard, deleteCreditCard, getCardInvoice, getCardTotalDebt, addCreditCardTransaction, updateCreditCardTransaction, deleteCreditCardTransaction, payCardInvoice, getBankName, getCategoryName, getCategoryIcon } = useFinance();
+   const { creditCards, banks, categories, creditCardTransactions, addCreditCard, updateCreditCard, deleteCreditCard, getCardInvoice, getCardTotalDebt, addCreditCardTransaction, bulkAddCreditCardTransactions, reloadCreditCardTransactions, updateCreditCardTransaction, deleteCreditCardTransaction, payCardInvoice, getBankName, getCategoryName, getCategoryIcon, descriptionMappings, saveDescriptionMapping } = useFinance();
   
   const [cardForm, setCardForm] = useState({ name: '', bank: '', limit: '', icon: '💳' });
   const [purchaseForm, setPurchaseForm] = useState({ date: new Date().toISOString().split('T')[0], description: '', card: '', category: '', value: '' });
@@ -17,6 +18,7 @@ export function CreditCards({ showNotification }: { showNotification: (msg: stri
   const [showEdit, setShowEdit] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editCardForm, setEditCardForm] = useState({ name: '', bank: '', limit: '', icon: '💳' });
+  const [showImportCsv, setShowImportCsv] = useState(false);
   const descriptionRef = useRef<HTMLInputElement>(null);
 
   const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -113,6 +115,114 @@ export function CreditCards({ showNotification }: { showNotification: (msg: stri
   const handleCancelEdit = () => {
     setEditingCardId(null);
   };
+
+     const handleBulkImport = async (transactions: { date: string; description: string; card: string; category: string; value: number; isPayment: boolean }[]) => {
+     console.log('🚀 Iniciando importação de', transactions.length, 'transações');
+     
+     const getTransactionFingerprint = (tx: { date: string; description: string; card: string; value: number }): string => {
+       return `${tx.date}|${tx.description.toUpperCase().trim()}|${tx.card}|${tx.value.toFixed(2)}`;
+     };
+     
+     const existingFingerprints = new Set(
+       creditCardTransactions.map(getTransactionFingerprint)
+     );
+     
+     const duplicates = transactions.filter(tx => existingFingerprints.has(getTransactionFingerprint(tx)));
+     const toImport = transactions.filter(tx => !existingFingerprints.has(getTransactionFingerprint(tx)));
+     
+     if (duplicates.length > 0) {
+       console.log(`⚠️ ${duplicates.length} transações DUPLICADAS detectadas e serão IGNORADAS:`);
+       duplicates.forEach((tx, i) => {
+         console.log(`   ${i + 1}. ${tx.date} | ${tx.description.substring(0, 30)} | R$ ${tx.value}`);
+       });
+     }
+     
+     if (toImport.length === 0) {
+       console.log('❌ Nenhuma transação nova para importar!');
+       showNotification(`Nenhuma transação nova! ${duplicates.length} duplicatas ignoradas.`, 'warning');
+       return;
+     }
+     
+     console.log(`📋 ${toImport.length} transações NOVAS para importar.`);
+     
+     const uniqueDescWithCategory = new Map<string, string>();
+     for (const tx of toImport) {
+       if (tx.category && !uniqueDescWithCategory.has(tx.description)) {
+         uniqueDescWithCategory.set(tx.description, tx.category);
+       }
+     }
+     
+     console.log(`💾 Salvando ${uniqueDescWithCategory.size} mapeamentos...`);
+     
+     const mappingPromises = Array.from(uniqueDescWithCategory.entries()).map(async ([desc, catId]) => {
+       try {
+         await saveDescriptionMapping(desc, catId);
+         console.log(`  ✅ Mapeamento salvo: "${desc.substring(0, 25)}"`);
+       } catch (err: any) {
+         console.warn(`  ⚠️ Erro ao salvar mapeamento "${desc}":`, err);
+       }
+     });
+     
+     await Promise.all(mappingPromises);
+     console.log(`✅ Todos os ${uniqueDescWithCategory.size} mapeamentos salvos!`);
+     
+     console.log(`📝 Inserindo ${toImport.length} transações com BULK INSERT...`);
+     
+     try {
+       const inserted = await bulkAddCreditCardTransactions(
+         toImport.map(tx => ({
+           date: tx.date,
+           description: tx.description,
+           card: tx.card,
+           category: tx.category,
+           value: tx.value,
+           isPayment: tx.isPayment
+         }))
+       );
+       
+       console.log(`🎉 BULK INSERT CONCLUÍDO! ${inserted} transações inseridas.`);
+       
+       console.log(`🔄 Recarregando transações para garantir sincronia...`);
+       await reloadCreditCardTransactions();
+       console.log(`✅ Transações recarregadas com sucesso!`);
+       
+     } catch (bulkError: any) {
+       console.error(`❌ Erro no BULK INSERT:`, bulkError);
+       console.log(`🔄 Tentando modo fallback (uma por uma)...`);
+       
+       let successCount = 0;
+       let errorCount = 0;
+       
+       for (let i = 0; i < transactions.length; i++) {
+         const tx = transactions[i];
+         try {
+           await addCreditCardTransaction({
+             date: tx.date,
+             description: tx.description,
+             card: tx.card,
+             category: tx.category,
+             value: tx.value,
+             isPayment: tx.isPayment
+           });
+           successCount++;
+           if (i % 10 === 0) {
+             console.log(`  📝 Progresso: ${successCount}/${transactions.length}`);
+           }
+         } catch (err: any) {
+           errorCount++;
+           console.error(`❌ Erro ao importar ${i + 1}: ${tx.description.substring(0, 30)}`, err);
+         }
+       }
+       
+       console.log(`🎉 Fallback CONCLUÍDO!`);
+       console.log(`   ✅ Sucesso: ${successCount}`);
+       console.log(`   ❌ Erros: ${errorCount}`);
+       
+       if (errorCount > 0 && successCount === 0) {
+         throw new Error(`${errorCount} erros durante a importação`);
+       }
+     }
+   };
 
   return (
     <div>
@@ -253,19 +363,22 @@ export function CreditCards({ showNotification }: { showNotification: (msg: stri
         })}
       </div>
 
-      {/* Filters & List */}
-      <div className="card">
-        <div className="filter-bar">
-          <select className="form-select" value={filters.date} onChange={e => setFilters({...filters, date: e.target.value})}>
-            <option value="">Todos</option>
-            <option value="thisMonth">Este Mês</option>
-          </select>
-          <select className="form-select" value={filters.card} onChange={e => setFilters({...filters, card: e.target.value})}>
-            <option value="">Cartões</option>
-            {creditCards.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-          </select>
-          <button className="btn btn-secondary btn-sm" onClick={() => setFilters({ card: '', date: 'thisMonth' })}>Limpar</button>
-        </div>
+       {/* Filters & List */}
+       <div className="card">
+         <div className="filter-bar">
+           <select className="form-select" value={filters.date} onChange={e => setFilters({...filters, date: e.target.value})}>
+             <option value="">Todos</option>
+             <option value="thisMonth">Este Mês</option>
+           </select>
+           <select className="form-select" value={filters.card} onChange={e => setFilters({...filters, card: e.target.value})}>
+             <option value="">Cartões</option>
+             {creditCards.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+           </select>
+           <button className="btn btn-secondary btn-sm" onClick={() => setFilters({ card: '', date: 'thisMonth' })}>Limpar</button>
+           <button className="btn btn-primary btn-sm" onClick={() => setShowImportCsv(true)} style={{ marginLeft: 'auto' }}>
+             📥 Importar CSV
+           </button>
+         </div>
 
         <div className="table-container">
           <table className="table">
@@ -313,16 +426,28 @@ export function CreditCards({ showNotification }: { showNotification: (msg: stri
         </div>
       </div>
 
-      {/* Edit Modal */}
-      <EditCreditCardTransactionModal
-        isOpen={showEdit}
-        onClose={() => setShowEdit(false)}
-        transaction={editTx}
-        creditCards={creditCards}
-        categories={categories}
-        onSave={updateCreditCardTransaction}
-        showNotification={showNotification}
-      />
-    </div>
-  );
-}
+       {/* Edit Modal */}
+       <EditCreditCardTransactionModal
+         isOpen={showEdit}
+         onClose={() => setShowEdit(false)}
+         transaction={editTx}
+         creditCards={creditCards}
+         categories={categories}
+         onSave={updateCreditCardTransaction}
+         showNotification={showNotification}
+       />
+
+       {/* Import CSV Modal */}
+       <ImportCsvModal
+         isOpen={showImportCsv}
+         onClose={() => setShowImportCsv(false)}
+         creditCards={creditCards.map(c => ({ id: c.id, name: c.name, icon: c.icon }))}
+         categories={categories.map(c => ({ id: c.id, name: c.name, icon: c.icon }))}
+         historicalTransactions={creditCardTransactions}
+         descriptionMappings={descriptionMappings}
+         onImport={handleBulkImport}
+         showNotification={showNotification}
+       />
+     </div>
+   );
+ }
